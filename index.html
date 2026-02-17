@@ -216,14 +216,22 @@
     <!-- API Key Modal -->
     <div id="ai-key-modal" class="modal hidden">
         <div class="modal-content">
-            <h3>OpenAI API Key</h3>
-            <p class="ai-key-hint">Required for AI features. Your key is stored locally in this browser only.</p>
+            <h3>AI Settings</h3>
+            <p class="ai-key-hint">Your key is stored locally in this browser only.</p>
             <div class="form-group">
-                <input type="password" id="ai-key-input" placeholder="sk-...">
+                <label for="ai-provider-select">Provider</label>
+                <div class="ai-provider-tabs">
+                    <button type="button" class="ai-provider-tab active" data-provider="google">Google Gemini</button>
+                    <button type="button" class="ai-provider-tab" data-provider="anthropic">Anthropic Claude</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="ai-key-input">API Key</label>
+                <input type="password" id="ai-key-input" placeholder="">
             </div>
             <div class="sheet-actions">
                 <button type="button" id="btn-key-cancel" class="action-btn">Cancel</button>
-                <button type="button" id="btn-key-save" class="action-btn primary">Save Key</button>
+                <button type="button" id="btn-key-save" class="action-btn primary">Save</button>
             </div>
         </div>
     </div>

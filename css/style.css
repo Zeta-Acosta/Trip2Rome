@@ -917,6 +917,36 @@ html, body {
     line-height: 1.4;
 }
 
+.ai-provider-tabs {
+    display: flex;
+    gap: 0;
+    border: 1.5px solid #ddd;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.ai-provider-tab {
+    flex: 1;
+    padding: 10px 8px;
+    border: none;
+    background: #fafafa;
+    color: #666;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.ai-provider-tab + .ai-provider-tab {
+    border-left: 1.5px solid #ddd;
+}
+
+.ai-provider-tab.active {
+    background: #5C6BC0;
+    color: #fff;
+}
+
 /* === Route Lines === */
 .route-distance-label {
     background: none;

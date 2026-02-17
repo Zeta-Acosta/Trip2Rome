@@ -16,6 +16,7 @@
         food:          { label: 'Food',       color: '#C62828', icon: '\u{1F37D}' },
         entertainment: { label: 'Fun',        color: '#7B1FA2', icon: '\u{1F3AE}' },
         shopping:      { label: 'Shopping',   color: '#2E7D32', icon: '\u{1F6CD}' },
+        science:       { label: 'Science',    color: '#00838F', icon: '\u{1F52C}' },
         custom:        { label: 'Other',      color: '#546E7A', icon: '\u{1F4CD}' }
     };
 
@@ -1108,7 +1109,7 @@
         'Return ONLY a valid JSON array (no markdown fences, no explanation). ' +
         'Each object must have: ' +
         '"name" (string), ' +
-        '"category" (one of: "accommodation", "landmark", "food", "entertainment", "shopping", "custom"), ' +
+        '"category" (one of: "accommodation", "landmark", "food", "entertainment", "shopping", "science", "custom"), ' +
         '"address" (string - full street address if available, otherwise ""), ' +
         '"lat" (number - accurate GPS latitude), ' +
         '"lng" (number - accurate GPS longitude), ' +

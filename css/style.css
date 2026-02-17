@@ -1,0 +1,662 @@
+/* === Reset & Base === */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: #333;
+}
+
+/* === Header === */
+#header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    height: 52px;
+    background: #2C1810;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+#header h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.header-right {
+    display: flex;
+    gap: 2px;
+}
+
+.header-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.header-btn:active {
+    background: rgba(255,255,255,0.2);
+}
+
+.header-btn.active {
+    background: rgba(255,255,255,0.15);
+    color: #FF9800;
+}
+
+/* === Map === */
+#map {
+    position: fixed;
+    top: 52px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1;
+}
+
+/* === Custom Markers === */
+.custom-marker {
+    background: none !important;
+    border: none !important;
+}
+
+.marker-pin {
+    width: 36px;
+    height: 44px;
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.marker-pin-head {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    border: 2.5px solid #fff;
+    position: relative;
+    z-index: 2;
+}
+
+.marker-pin-tail {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    z-index: 1;
+}
+
+.marker-icon {
+    font-size: 15px;
+    line-height: 1;
+}
+
+.marker-bounce {
+    animation: markerBounce 0.4s ease-out;
+}
+
+@keyframes markerBounce {
+    0% { transform: translateY(-20px); opacity: 0; }
+    60% { transform: translateY(4px); opacity: 1; }
+    100% { transform: translateY(0); }
+}
+
+/* === FAB === */
+#fab-add {
+    position: fixed;
+    bottom: 28px;
+    right: 20px;
+    z-index: 999;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: #D84315;
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(216,67,21,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, box-shadow 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#fab-add:active {
+    transform: scale(0.92);
+    box-shadow: 0 2px 8px rgba(216,67,21,0.3);
+}
+
+#fab-add.hidden {
+    display: none;
+}
+
+/* === Banners === */
+#add-mode-banner,
+#route-bar {
+    position: fixed;
+    top: 52px;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+}
+
+#add-mode-banner {
+    background: #FF9800;
+    color: #000;
+}
+
+#route-bar {
+    background: #1565C0;
+    color: #fff;
+}
+
+.banner-btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.25);
+    color: inherit;
+    font-weight: 600;
+    font-size: 0.82rem;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.banner-btn.cancel {
+    background: rgba(0,0,0,0.15);
+}
+
+.banner-btn:active {
+    opacity: 0.7;
+}
+
+/* === Overlay === */
+#overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 1001;
+    transition: opacity 0.2s;
+}
+
+/* === Bottom Sheets === */
+.bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1002;
+    background: #fff;
+    border-radius: 18px 18px 0 0;
+    max-height: 85vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+}
+
+.bottom-sheet.visible {
+    transform: translateY(0);
+}
+
+.sheet-handle {
+    width: 40px;
+    height: 4px;
+    background: #ddd;
+    border-radius: 2px;
+    margin: 12px auto 8px;
+}
+
+.sheet-content {
+    padding: 0 20px 28px;
+}
+
+.sheet-content h2 {
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+    color: #2C1810;
+}
+
+/* === Detail Sheet === */
+.detail-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.category-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.detail-header h2 {
+    margin-bottom: 0;
+}
+
+.detail-meta p {
+    font-size: 0.88rem;
+    color: #666;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.detail-meta p:empty {
+    display: none;
+}
+
+.detail-notes {
+    margin-top: 12px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: #444;
+    white-space: pre-wrap;
+}
+
+.detail-notes:empty {
+    display: none;
+}
+
+/* === Sheet Actions === */
+.sheet-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.action-btn {
+    flex: 1;
+    padding: 12px 16px;
+    border: 1.5px solid #ddd;
+    border-radius: 10px;
+    background: #fff;
+    color: #333;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.action-btn:active {
+    background: #f0f0f0;
+}
+
+.action-btn.primary {
+    background: #D84315;
+    color: #fff;
+    border-color: #D84315;
+}
+
+.action-btn.primary:active {
+    background: #BF360C;
+}
+
+.action-btn.danger {
+    color: #D32F2F;
+    border-color: #FFCDD2;
+}
+
+.action-btn.danger:active {
+    background: #FFEBEE;
+}
+
+/* === Form === */
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid #ddd;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-family: inherit;
+    color: #333;
+    background: #fafafa;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #D84315;
+    background: #fff;
+}
+
+.form-row {
+    display: flex;
+    gap: 12px;
+}
+
+.form-group.half {
+    flex: 1;
+}
+
+/* === Category Selector Grid === */
+.category-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.cat-option {
+    padding: 10px 8px;
+    border: 2px solid #eee;
+    border-radius: 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.cat-option .cat-icon {
+    font-size: 1.3rem;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.cat-option .cat-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+}
+
+.cat-option.selected {
+    border-width: 2.5px;
+    background: rgba(0,0,0,0.03);
+}
+
+/* === List Sheet === */
+.list-header {
+    margin-bottom: 12px;
+}
+
+.filter-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.filter-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1.5px solid #ddd;
+    background: #fff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.filter-chip .chip-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.filter-chip.active {
+    border-color: currentColor;
+    background: rgba(0,0,0,0.04);
+}
+
+.filter-chip.inactive {
+    opacity: 0.4;
+}
+
+/* === Location List Items === */
+.location-list {
+    max-height: 55vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.loc-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.loc-item:last-child {
+    border-bottom: none;
+}
+
+.loc-item:active {
+    background: #f8f8f8;
+}
+
+.loc-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.loc-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.loc-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.loc-detail {
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.loc-arrow {
+    color: #ccc;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.list-empty {
+    text-align: center;
+    padding: 32px 16px;
+    color: #999;
+    font-size: 0.9rem;
+}
+
+/* === Toast === */
+.toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    background: #333;
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transition: opacity 0.3s, transform 0.3s;
+    white-space: nowrap;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* === Download Modal === */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2000;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.modal-content {
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px 24px;
+    width: 100%;
+    max-width: 340px;
+    text-align: center;
+}
+
+.modal-content h3 {
+    font-size: 1.1rem;
+    margin-bottom: 16px;
+    color: #2C1810;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #eee;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 12px 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #D84315;
+    border-radius: 4px;
+    transition: width 0.3s;
+    width: 0%;
+}
+
+#download-percent {
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 16px;
+}
+
+#download-status {
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+/* === Utility === */
+.hidden {
+    display: none !important;
+}
+
+/* === Leaflet Overrides === */
+.leaflet-control-attribution {
+    font-size: 9px !important;
+    max-width: 50vw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.leaflet-control-zoom {
+    border: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+}
+
+.leaflet-control-zoom a {
+    border-radius: 8px !important;
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    font-size: 18px !important;
+}
+
+/* === Route Lines === */
+.route-distance-label {
+    background: none;
+    border: none;
+    box-shadow: none;
+    font-size: 11px;
+    font-weight: 700;
+    color: #1565C0;
+    white-space: nowrap;
+}

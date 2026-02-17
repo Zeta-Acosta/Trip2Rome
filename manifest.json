@@ -1,0 +1,19 @@
+{
+    "name": "Trip2Rome - Rome Travel Map",
+    "short_name": "Trip2Rome",
+    "description": "Interactive Rome travel map with custom pins and offline support",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#ffffff",
+    "theme_color": "#2C1810",
+    "icons": [
+        {
+            "src": "icons/icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        }
+    ],
+    "categories": ["travel", "navigation"]
+}

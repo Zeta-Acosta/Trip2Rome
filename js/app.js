@@ -7,6 +7,7 @@
     var ROME_CENTER = [41.9028, 12.4964];
     var DEFAULT_ZOOM = 13;
     var STORAGE_KEY = 'trip2rome_locations';
+    var AI_KEY_STORAGE = 'trip2rome_openai_key';
 
     var CATEGORIES = {
         accommodation: { label: 'Stay',       color: '#1565C0', icon: '\u{1F3E0}' },
@@ -90,6 +91,10 @@
     var selectedCategory = 'landmark';
     var tempMarker = null;
     var positionMarker = null;
+
+    // AI state
+    var aiImageData = null;
+    var aiExtractedLocations = [];
 
     // Live tracking state
     var liveTracking = false;
@@ -480,6 +485,7 @@
         addMode = true;
         document.getElementById('add-mode-banner').classList.remove('hidden');
         document.getElementById('fab-add').classList.add('hidden');
+        document.getElementById('fab-ai').classList.add('hidden');
         document.getElementById('map').style.cursor = 'crosshair';
     }
 
@@ -487,6 +493,7 @@
         addMode = false;
         document.getElementById('add-mode-banner').classList.add('hidden');
         document.getElementById('fab-add').classList.remove('hidden');
+        document.getElementById('fab-ai').classList.remove('hidden');
         document.getElementById('map').style.cursor = '';
         if (tempMarker) {
             map.removeLayer(tempMarker);
@@ -1094,6 +1101,313 @@
     }
 
     // =========================================================================
+    // AI Pin Creator
+    // =========================================================================
+    var AI_SYSTEM_PROMPT = 'You extract location information from text or images about places to visit. ' +
+        'Return ONLY a valid JSON array (no markdown fences, no explanation). ' +
+        'Each object must have: ' +
+        '"name" (string), ' +
+        '"category" (one of: "accommodation", "landmark", "food", "entertainment", "shopping", "custom"), ' +
+        '"address" (string - full street address if available, otherwise ""), ' +
+        '"lat" (number - accurate GPS latitude), ' +
+        '"lng" (number - accurate GPS longitude), ' +
+        '"notes" (string - include ALL useful details: opening hours, admission fees, tips, website URLs, phone numbers, recommended duration. Separate with newlines), ' +
+        '"date" (string - ISO YYYY-MM-DD if a specific date is mentioned, otherwise ""), ' +
+        '"time" (string - HH:MM if a specific time is mentioned, otherwise ""). ' +
+        'Assume locations are in Rome, Italy unless clearly stated otherwise. ' +
+        'Use accurate GPS coordinates for well-known landmarks and attractions.';
+
+    function showAISheet() {
+        var apiKey = localStorage.getItem(AI_KEY_STORAGE);
+        if (!apiKey) {
+            showAIKeyModal();
+            return;
+        }
+
+        // Reset state
+        document.getElementById('ai-text-input').value = '';
+        aiImageData = null;
+        aiExtractedLocations = [];
+        document.getElementById('ai-image-preview').classList.add('hidden');
+        document.getElementById('ai-input-section').classList.remove('hidden');
+        document.getElementById('ai-results-section').classList.add('hidden');
+        document.getElementById('ai-loading').classList.add('hidden');
+        document.getElementById('ai-sheet-title').textContent = 'AI Pin Creator';
+
+        showSheet('ai-sheet');
+    }
+
+    function showAIKeyModal() {
+        document.getElementById('ai-key-input').value = localStorage.getItem(AI_KEY_STORAGE) || '';
+        document.getElementById('ai-key-modal').classList.remove('hidden');
+    }
+
+    function hideAIKeyModal() {
+        document.getElementById('ai-key-modal').classList.add('hidden');
+    }
+
+    function saveAIKey() {
+        var key = document.getElementById('ai-key-input').value.trim();
+        if (!key) {
+            showToast('Please enter an API key');
+            return;
+        }
+        localStorage.setItem(AI_KEY_STORAGE, key);
+        hideAIKeyModal();
+        showToast('API key saved');
+
+        // If AI sheet isn't open yet, open it now
+        var aiSheet = document.getElementById('ai-sheet');
+        if (aiSheet.classList.contains('hidden')) {
+            showAISheet();
+        }
+    }
+
+    function handleAIPaste(e) {
+        var aiSheet = document.getElementById('ai-sheet');
+        if (aiSheet.classList.contains('hidden')) return;
+
+        var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                var blob = items[i].getAsFile();
+                var reader = new FileReader();
+                reader.onload = function (ev) {
+                    aiImageData = ev.target.result;
+                    showAIImagePreview(aiImageData);
+                };
+                reader.readAsDataURL(blob);
+                e.preventDefault();
+                return;
+            }
+        }
+    }
+
+    function handleAIFileInput(e) {
+        var file = e.target.files[0];
+        if (!file || file.type.indexOf('image') === -1) return;
+
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+            aiImageData = ev.target.result;
+            showAIImagePreview(aiImageData);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function showAIImagePreview(dataUrl) {
+        var preview = document.getElementById('ai-image-preview');
+        document.getElementById('ai-preview-img').src = dataUrl;
+        preview.classList.remove('hidden');
+    }
+
+    function removeAIImage() {
+        aiImageData = null;
+        document.getElementById('ai-image-preview').classList.add('hidden');
+        document.getElementById('ai-preview-img').src = '';
+        document.getElementById('ai-file-input').value = '';
+    }
+
+    function processAIContent() {
+        var text = document.getElementById('ai-text-input').value.trim();
+        if (!text && !aiImageData) {
+            showToast('Paste some text or an image first');
+            return;
+        }
+
+        var apiKey = localStorage.getItem(AI_KEY_STORAGE);
+        if (!apiKey) {
+            showAIKeyModal();
+            return;
+        }
+
+        // Show loading
+        document.getElementById('ai-input-section').classList.add('hidden');
+        document.getElementById('ai-loading').classList.remove('hidden');
+
+        // Build messages
+        var userContent = [];
+        if (text) {
+            userContent.push({ type: 'text', text: 'Extract location info from this:\n\n' + text });
+        }
+        if (aiImageData) {
+            if (!text) {
+                userContent.push({ type: 'text', text: 'Extract location info from this image:' });
+            }
+            userContent.push({
+                type: 'image_url',
+                image_url: { url: aiImageData, detail: 'high' }
+            });
+        }
+
+        var body = {
+            model: 'gpt-4o',
+            messages: [
+                { role: 'system', content: AI_SYSTEM_PROMPT },
+                { role: 'user', content: userContent }
+            ],
+            max_tokens: 4000,
+            temperature: 0.1
+        };
+
+        fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + apiKey
+            },
+            body: JSON.stringify(body)
+        })
+        .then(function (response) {
+            if (!response.ok) {
+                return response.json().then(function (err) {
+                    throw new Error(err.error && err.error.message ? err.error.message : 'API request failed (' + response.status + ')');
+                });
+            }
+            return response.json();
+        })
+        .then(function (data) {
+            var content = data.choices[0].message.content;
+            // Strip markdown code fences if present
+            content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+            var parsed = JSON.parse(content);
+            if (!Array.isArray(parsed)) parsed = [parsed];
+            aiExtractedLocations = parsed;
+            showAIResults(parsed);
+        })
+        .catch(function (err) {
+            document.getElementById('ai-loading').classList.add('hidden');
+            document.getElementById('ai-input-section').classList.remove('hidden');
+            showToast('Error: ' + err.message);
+        });
+    }
+
+    function showAIResults(locs) {
+        document.getElementById('ai-loading').classList.add('hidden');
+
+        if (!locs || locs.length === 0) {
+            document.getElementById('ai-input-section').classList.remove('hidden');
+            showToast('No locations found in content');
+            return;
+        }
+
+        document.getElementById('ai-sheet-title').textContent = 'Found ' + locs.length + ' Location' + (locs.length > 1 ? 's' : '');
+        document.getElementById('ai-results-summary').textContent = 'Review the extracted locations below, then add them to your map.';
+
+        var list = document.getElementById('ai-results-list');
+        list.innerHTML = '';
+
+        locs.forEach(function (loc, idx) {
+            var cat = CATEGORIES[loc.category] || CATEGORIES.custom;
+            var notesPreview = (loc.notes || '').split('\n')[0];
+            if (notesPreview.length > 80) notesPreview = notesPreview.substr(0, 80) + '...';
+
+            var card = document.createElement('div');
+            card.className = 'ai-result-card';
+            card.dataset.index = idx;
+            card.innerHTML =
+                '<div class="ai-result-header">' +
+                '  <span class="ai-result-icon" style="background:' + cat.color + '">' + cat.icon + '</span>' +
+                '  <div class="ai-result-info">' +
+                '    <div class="ai-result-name">' + escapeHtml(loc.name) + '</div>' +
+                '    <div class="ai-result-category">' + cat.label + (loc.address ? ' &middot; ' + escapeHtml(loc.address) : '') + '</div>' +
+                '  </div>' +
+                '</div>' +
+                (notesPreview ? '<div class="ai-result-notes">' + escapeHtml(notesPreview) + '</div>' : '') +
+                '<div class="ai-result-actions">' +
+                '  <button type="button" class="action-btn ai-btn-add-one" data-index="' + idx + '">Add</button>' +
+                '</div>';
+
+            list.appendChild(card);
+        });
+
+        // Bind individual add buttons
+        list.querySelectorAll('.ai-btn-add-one').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var i = parseInt(btn.dataset.index, 10);
+                addSingleAILocation(i, btn);
+            });
+        });
+
+        document.getElementById('ai-results-section').classList.remove('hidden');
+    }
+
+    function addSingleAILocation(index, btnEl) {
+        var loc = aiExtractedLocations[index];
+        if (!loc || !loc.name) return;
+
+        var data = {
+            id: 'loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            name: loc.name,
+            category: CATEGORIES[loc.category] ? loc.category : 'custom',
+            lat: parseFloat(loc.lat) || ROME_CENTER[0],
+            lng: parseFloat(loc.lng) || ROME_CENTER[1],
+            address: loc.address || '',
+            date: loc.date || '',
+            time: loc.time || '',
+            notes: loc.notes || ''
+        };
+
+        addLocation(data);
+
+        // Update button
+        if (btnEl) {
+            btnEl.textContent = 'Added';
+            btnEl.disabled = true;
+            btnEl.classList.add('added');
+        }
+
+        showToast(loc.name + ' added!');
+    }
+
+    function addAllAILocations() {
+        var count = 0;
+        var btns = document.querySelectorAll('.ai-btn-add-one');
+
+        aiExtractedLocations.forEach(function (loc, idx) {
+            if (!loc || !loc.name) return;
+
+            // Skip already-added
+            var btn = btns[idx];
+            if (btn && btn.disabled) return;
+
+            var data = {
+                id: 'loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5) + idx,
+                name: loc.name,
+                category: CATEGORIES[loc.category] ? loc.category : 'custom',
+                lat: parseFloat(loc.lat) || ROME_CENTER[0],
+                lng: parseFloat(loc.lng) || ROME_CENTER[1],
+                address: loc.address || '',
+                date: loc.date || '',
+                time: loc.time || '',
+                notes: loc.notes || ''
+            };
+
+            addLocation(data);
+            count++;
+
+            if (btn) {
+                btn.textContent = 'Added';
+                btn.disabled = true;
+                btn.classList.add('added');
+            }
+        });
+
+        if (count > 0) {
+            showToast(count + ' location' + (count > 1 ? 's' : '') + ' added!');
+            hideAllSheets();
+            fitAllMarkers();
+        }
+    }
+
+    function aiGoBack() {
+        document.getElementById('ai-results-section').classList.add('hidden');
+        document.getElementById('ai-input-section').classList.remove('hidden');
+        document.getElementById('ai-sheet-title').textContent = 'AI Pin Creator';
+    }
+
+    // =========================================================================
     // Event Listeners
     // =========================================================================
     function setupEvents() {
@@ -1159,6 +1473,21 @@
         document.getElementById('btn-cancel-download').addEventListener('click', function () {
             document.getElementById('download-modal').classList.add('hidden');
         });
+
+        // AI Pin Creator
+        document.getElementById('fab-ai').addEventListener('click', showAISheet);
+        document.getElementById('btn-ai-cancel').addEventListener('click', hideAllSheets);
+        document.getElementById('btn-ai-extract').addEventListener('click', processAIContent);
+        document.getElementById('btn-ai-back').addEventListener('click', aiGoBack);
+        document.getElementById('btn-ai-add-all').addEventListener('click', addAllAILocations);
+        document.getElementById('btn-ai-settings').addEventListener('click', showAIKeyModal);
+        document.getElementById('btn-key-save').addEventListener('click', saveAIKey);
+        document.getElementById('btn-key-cancel').addEventListener('click', hideAIKeyModal);
+        document.getElementById('btn-remove-image').addEventListener('click', removeAIImage);
+        document.getElementById('ai-file-input').addEventListener('change', handleAIFileInput);
+
+        // Listen for paste events (image paste into AI sheet)
+        document.addEventListener('paste', handleAIPaste);
 
         // Handle sheet drag to dismiss (simple swipe-down)
         document.querySelectorAll('.sheet-handle').forEach(function (handle) {

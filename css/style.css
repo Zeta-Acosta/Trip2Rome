@@ -71,9 +71,10 @@ html, body {
     top: 52px;
     left: 0;
     right: 0;
-    z-index: 999;
+    z-index: 1000;
     height: 40px;
     background: #3E2723;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     display: flex;
     align-items: center;
     gap: 0;

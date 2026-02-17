@@ -91,6 +91,26 @@
     var tempMarker = null;
     var positionMarker = null;
 
+    // Live tracking state
+    var liveTracking = false;
+    var watchId = null;
+    var trackingLayer = null;
+    var trackingDot = null;
+    var trackingAccuracyCircle = null;
+    var lastKnownPosition = null;
+    var lastRenderedPosition = null;
+    var lastRenderTimestamp = 0;
+    var consecutiveErrors = 0;
+    var hiddenTimestamp = 0;
+    var autoStopTimer = null;
+    var pendingPosition = null;
+    var renderTimeoutId = null;
+    var currentHighAccuracy = true;
+    var stationaryCount = 0;
+    var MAX_CONSECUTIVE_ERRORS = 5;
+    var MIN_RENDER_INTERVAL = 1000;
+    var MAX_HIDDEN_DURATION = 5 * 60 * 1000; // 5 minutes
+
     // Init all category filters as active
     Object.keys(CATEGORIES).forEach(function (k) { activeFilters[k] = true; });
 
@@ -633,6 +653,12 @@
     // GPS - Show My Location
     // =========================================================================
     function goToMyLocation() {
+        // If live tracking is active, just pan to the known position
+        if (liveTracking && lastKnownPosition) {
+            map.setView([lastKnownPosition.lat, lastKnownPosition.lng], 16);
+            return;
+        }
+
         if (!navigator.geolocation) {
             showToast('GPS not available');
             return;
@@ -659,6 +685,283 @@
             },
             { enableHighAccuracy: true, timeout: 10000 }
         );
+    }
+
+    // =========================================================================
+    // Live Tracking
+    // =========================================================================
+    function toggleTracking() {
+        if (liveTracking) {
+            stopTracking();
+            return;
+        }
+
+        if (!navigator.geolocation) {
+            showToast('GPS not available on this device');
+            return;
+        }
+
+        // Check permission state if API available
+        if (navigator.permissions) {
+            navigator.permissions.query({ name: 'geolocation' }).then(function (result) {
+                if (result.state === 'denied') {
+                    showToast('Location access denied. Enable in browser settings.');
+                    return;
+                }
+                startTracking();
+
+                // Watch for permission revocation
+                result.addEventListener('change', function () {
+                    if (result.state === 'denied' && liveTracking) {
+                        stopTracking();
+                        showToast('Location permission revoked');
+                    }
+                });
+            }).catch(function () {
+                startTracking();
+            });
+        } else {
+            startTracking();
+        }
+    }
+
+    function startTracking() {
+        if (watchId !== null) return;
+
+        liveTracking = true;
+        consecutiveErrors = 0;
+        stationaryCount = 0;
+        currentHighAccuracy = true;
+        lastKnownPosition = null;
+        lastRenderedPosition = null;
+
+        // Remove one-shot position marker if present
+        if (positionMarker) {
+            map.removeLayer(positionMarker);
+            positionMarker = null;
+        }
+
+        updateTrackingUI(true);
+        showToast('Live tracking enabled');
+        announceTrackingStatus('Live tracking enabled');
+
+        watchId = navigator.geolocation.watchPosition(
+            onTrackingPosition,
+            onTrackingError,
+            {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 5000
+            }
+        );
+
+        // Listen for page visibility changes
+        document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+
+    function stopTracking() {
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+
+        liveTracking = false;
+        pendingPosition = null;
+
+        if (renderTimeoutId) {
+            clearTimeout(renderTimeoutId);
+            renderTimeoutId = null;
+        }
+        if (autoStopTimer) {
+            clearTimeout(autoStopTimer);
+            autoStopTimer = null;
+        }
+
+        // Remove tracking layers
+        if (trackingLayer) {
+            map.removeLayer(trackingLayer);
+            trackingLayer = null;
+            trackingDot = null;
+            trackingAccuracyCircle = null;
+        }
+
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+
+        updateTrackingUI(false);
+        showToast('Live tracking disabled');
+        announceTrackingStatus('Live tracking disabled');
+    }
+
+    function onTrackingPosition(pos) {
+        consecutiveErrors = 0;
+
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        var accuracy = pos.coords.accuracy;
+        var heading = pos.coords.heading;
+
+        lastKnownPosition = { lat: lat, lng: lng, accuracy: accuracy };
+
+        // Adaptive accuracy: reduce GPS usage when stationary
+        if (lastRenderedPosition) {
+            var dist = haversine(lastRenderedPosition.lat, lastRenderedPosition.lng, lat, lng);
+            if (dist < 5) {
+                stationaryCount++;
+            } else {
+                stationaryCount = 0;
+            }
+
+            // After ~30s stationary, switch to low accuracy
+            if (stationaryCount > 6 && currentHighAccuracy) {
+                restartWatchWithAccuracy(false);
+            } else if (stationaryCount === 0 && !currentHighAccuracy) {
+                restartWatchWithAccuracy(true);
+            }
+        }
+
+        // Throttle rendering to max once per second
+        var now = Date.now();
+        pendingPosition = { lat: lat, lng: lng, accuracy: accuracy, heading: heading };
+
+        if (now - lastRenderTimestamp >= MIN_RENDER_INTERVAL) {
+            renderTrackingPosition();
+        } else if (!renderTimeoutId) {
+            renderTimeoutId = setTimeout(function () {
+                renderTrackingPosition();
+            }, MIN_RENDER_INTERVAL - (now - lastRenderTimestamp));
+        }
+    }
+
+    function renderTrackingPosition() {
+        renderTimeoutId = null;
+        if (!pendingPosition) return;
+
+        var pos = pendingPosition;
+        pendingPosition = null;
+        lastRenderTimestamp = Date.now();
+        lastRenderedPosition = { lat: pos.lat, lng: pos.lng };
+
+        updatePositionOnMap(pos.lat, pos.lng, pos.accuracy);
+    }
+
+    function updatePositionOnMap(lat, lng, accuracy) {
+        var latlng = L.latLng(lat, lng);
+
+        if (!trackingLayer) {
+            // First time: create all layers
+            trackingLayer = L.layerGroup().addTo(map);
+
+            trackingAccuracyCircle = L.circle(latlng, {
+                radius: accuracy,
+                fillColor: '#4285F4',
+                fillOpacity: 0.08,
+                color: '#4285F4',
+                weight: 1,
+                opacity: 0.3
+            }).addTo(trackingLayer);
+
+            trackingDot = L.circleMarker(latlng, {
+                radius: 8,
+                fillColor: '#4285F4',
+                fillOpacity: 1,
+                color: '#fff',
+                weight: 3
+            }).addTo(trackingLayer);
+
+            // Center on first position
+            map.setView(latlng, Math.max(map.getZoom(), 15));
+        } else {
+            // Update in place (no DOM recreation)
+            trackingDot.setLatLng(latlng);
+            trackingAccuracyCircle.setLatLng(latlng);
+            trackingAccuracyCircle.setRadius(accuracy);
+        }
+    }
+
+    function onTrackingError(err) {
+        consecutiveErrors++;
+
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+            stopTracking();
+            showToast('Tracking stopped - GPS unavailable');
+            return;
+        }
+
+        switch (err.code) {
+            case err.PERMISSION_DENIED:
+                stopTracking();
+                showToast('Location permission denied');
+                break;
+            case err.POSITION_UNAVAILABLE:
+                showToast('GPS signal lost - retrying...');
+                break;
+            case err.TIMEOUT:
+                showToast('Location taking longer than expected...');
+                break;
+        }
+    }
+
+    function restartWatchWithAccuracy(highAccuracy) {
+        currentHighAccuracy = highAccuracy;
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+        }
+        watchId = navigator.geolocation.watchPosition(
+            onTrackingPosition,
+            onTrackingError,
+            {
+                enableHighAccuracy: highAccuracy,
+                timeout: highAccuracy ? 15000 : 30000,
+                maximumAge: highAccuracy ? 5000 : 15000
+            }
+        );
+    }
+
+    function updateTrackingUI(active) {
+        var btn = document.getElementById('btn-live-track');
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+
+    function announceTrackingStatus(message) {
+        var el = document.getElementById('tracking-status');
+        if (el) el.textContent = message;
+    }
+
+    // Page Visibility API - pause/resume tracking for battery savings
+    function onVisibilityChange() {
+        if (!liveTracking) return;
+
+        if (document.hidden) {
+            hiddenTimestamp = Date.now();
+            autoStopTimer = setTimeout(function () {
+                if (liveTracking && document.hidden) {
+                    stopTracking();
+                }
+            }, MAX_HIDDEN_DURATION);
+        } else {
+            if (autoStopTimer) {
+                clearTimeout(autoStopTimer);
+                autoStopTimer = null;
+            }
+
+            // If hidden for too long, tracking was already stopped
+            if (!liveTracking) return;
+
+            // Restart the watcher in case it was paused by the browser
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+            watchId = navigator.geolocation.watchPosition(
+                onTrackingPosition,
+                onTrackingError,
+                {
+                    enableHighAccuracy: currentHighAccuracy,
+                    timeout: 15000,
+                    maximumAge: 5000
+                }
+            );
+        }
     }
 
     // =========================================================================
@@ -810,6 +1113,7 @@
         });
 
         // Header buttons
+        document.getElementById('btn-live-track').addEventListener('click', toggleTracking);
         document.getElementById('btn-my-location').addEventListener('click', goToMyLocation);
         document.getElementById('btn-fit-all').addEventListener('click', fitAllMarkers);
         document.getElementById('btn-route').addEventListener('click', toggleRoute);

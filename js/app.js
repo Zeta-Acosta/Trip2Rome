@@ -1158,10 +1158,13 @@
 
     function updateKeyPlaceholder(provider) {
         var input = document.getElementById('ai-key-input');
+        var help = document.getElementById('ai-key-help');
         if (provider === 'anthropic') {
             input.placeholder = 'sk-ant-...';
+            help.innerHTML = 'Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>';
         } else {
             input.placeholder = 'AIza...';
+            help.innerHTML = 'Get your key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>';
         }
     }
 
@@ -1200,12 +1203,10 @@
         for (var i = 0; i < items.length; i++) {
             if (items[i].type.indexOf('image') !== -1) {
                 var blob = items[i].getAsFile();
-                var reader = new FileReader();
-                reader.onload = function (ev) {
-                    aiImageData = ev.target.result;
-                    showAIImagePreview(aiImageData);
-                };
-                reader.readAsDataURL(blob);
+                compressImage(blob, function (dataUrl) {
+                    aiImageData = dataUrl;
+                    showAIImagePreview(dataUrl);
+                });
                 e.preventDefault();
                 return;
             }
@@ -1216,12 +1217,38 @@
         var file = e.target.files[0];
         if (!file || file.type.indexOf('image') === -1) return;
 
-        var reader = new FileReader();
-        reader.onload = function (ev) {
-            aiImageData = ev.target.result;
-            showAIImagePreview(aiImageData);
+        compressImage(file, function (dataUrl) {
+            aiImageData = dataUrl;
+            showAIImagePreview(dataUrl);
+        });
+    }
+
+    function compressImage(blob, callback) {
+        var img = new Image();
+        img.onload = function () {
+            var MAX_DIM = 1024;
+            var w = img.width;
+            var h = img.height;
+
+            // Only resize if larger than MAX_DIM
+            if (w > MAX_DIM || h > MAX_DIM) {
+                if (w > h) {
+                    h = Math.round(h * MAX_DIM / w);
+                    w = MAX_DIM;
+                } else {
+                    w = Math.round(w * MAX_DIM / h);
+                    h = MAX_DIM;
+                }
+            }
+
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            callback(canvas.toDataURL('image/jpeg', 0.85));
         };
-        reader.readAsDataURL(file);
+        img.src = URL.createObjectURL(blob);
     }
 
     function showAIImagePreview(dataUrl) {
@@ -1273,9 +1300,22 @@
             document.getElementById('ai-loading').classList.add('hidden');
             document.getElementById('ai-input-section').classList.remove('hidden');
             var msg = err.message || 'Unknown error';
-            // Truncate long API error messages
-            if (msg.length > 60) msg = msg.substring(0, 60) + '...';
-            showToast('Error: ' + msg);
+
+            // Provide actionable error messages
+            if (msg === 'Failed to fetch') {
+                var prov = getAIProvider();
+                if (prov === 'anthropic') {
+                    msg = 'Cannot reach Anthropic API from browser. Try Google Gemini instead.';
+                } else {
+                    msg = 'Network error. Check your connection.';
+                }
+            } else if (msg.indexOf('API key') !== -1 || msg.indexOf('API_KEY') !== -1) {
+                msg = 'Invalid API key. Tap the gear icon to update it.';
+            } else if (msg.length > 70) {
+                msg = msg.substring(0, 70) + '...';
+            }
+
+            showToast(msg);
         });
     }
 

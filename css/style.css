@@ -916,8 +916,20 @@ html, body {
 .ai-key-hint {
     font-size: 0.82rem;
     color: #888;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     line-height: 1.4;
+}
+
+.ai-key-help {
+    font-size: 0.82rem;
+    color: #5C6BC0;
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.ai-key-help a {
+    color: #5C6BC0;
+    text-decoration: underline;
 }
 
 .ai-provider-tabs {

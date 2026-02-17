@@ -47,6 +47,11 @@
     <!-- Map Container -->
     <div id="map"></div>
 
+    <!-- Floating Action Button - AI Add -->
+    <button id="fab-ai" title="AI Add Location">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/></svg>
+    </button>
+
     <!-- Floating Action Button - Add Location -->
     <button id="fab-add" title="Add Location">
         <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
@@ -151,6 +156,77 @@
 
     <!-- Tracking Status (screen reader) -->
     <div id="tracking-status" class="sr-only" aria-live="polite"></div>
+
+    <!-- AI Add Bottom Sheet -->
+    <div id="ai-sheet" class="bottom-sheet hidden">
+        <div class="sheet-handle"></div>
+        <div class="sheet-content">
+            <h2 id="ai-sheet-title">AI Pin Creator</h2>
+
+            <!-- Input Section -->
+            <div id="ai-input-section">
+                <div class="form-group">
+                    <label>Paste text or image</label>
+                    <textarea id="ai-text-input" rows="5" placeholder="Paste any text about Rome locations — travel blogs, reviews, notes, screenshots..."></textarea>
+                </div>
+
+                <div id="ai-image-preview" class="ai-image-preview hidden">
+                    <img id="ai-preview-img" src="" alt="Pasted image">
+                    <button type="button" id="btn-remove-image" class="ai-remove-img" title="Remove image">&times;</button>
+                </div>
+
+                <div class="ai-toolbar">
+                    <label class="ai-file-label" for="ai-file-input">
+                        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                        Add image
+                    </label>
+                    <input type="file" id="ai-file-input" accept="image/*" class="hidden">
+                    <button type="button" id="btn-ai-settings" class="ai-settings-btn" title="API Key Settings">
+                        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                    </button>
+                </div>
+
+                <div class="sheet-actions">
+                    <button type="button" id="btn-ai-cancel" class="action-btn">Cancel</button>
+                    <button type="button" id="btn-ai-extract" class="action-btn primary">
+                        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5z"/></svg>
+                        Extract Locations
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="ai-loading" class="ai-loading hidden">
+                <div class="ai-spinner"></div>
+                <p>Analyzing content...</p>
+            </div>
+
+            <!-- Results Section -->
+            <div id="ai-results-section" class="hidden">
+                <p id="ai-results-summary" class="ai-results-summary"></p>
+                <div id="ai-results-list" class="ai-results-list"></div>
+                <div class="sheet-actions">
+                    <button type="button" id="btn-ai-back" class="action-btn">Back</button>
+                    <button type="button" id="btn-ai-add-all" class="action-btn primary">Add All to Map</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key Modal -->
+    <div id="ai-key-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>OpenAI API Key</h3>
+            <p class="ai-key-hint">Required for AI features. Your key is stored locally in this browser only.</p>
+            <div class="form-group">
+                <input type="password" id="ai-key-input" placeholder="sk-...">
+            </div>
+            <div class="sheet-actions">
+                <button type="button" id="btn-key-cancel" class="action-btn">Cancel</button>
+                <button type="button" id="btn-key-save" class="action-btn primary">Save Key</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Notification -->
     <div id="toast" class="toast hidden"></div>

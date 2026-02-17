@@ -7,7 +7,8 @@
     var ROME_CENTER = [41.9028, 12.4964];
     var DEFAULT_ZOOM = 13;
     var STORAGE_KEY = 'trip2rome_locations';
-    var AI_KEY_STORAGE = 'trip2rome_openai_key';
+    var AI_KEY_STORAGE = 'trip2rome_ai_key';
+    var AI_PROVIDER_STORAGE = 'trip2rome_ai_provider';
 
     var CATEGORIES = {
         accommodation: { label: 'Stay',       color: '#1565C0', icon: '\u{1F3E0}' },
@@ -1117,6 +1118,10 @@
         'Assume locations are in Rome, Italy unless clearly stated otherwise. ' +
         'Use accurate GPS coordinates for well-known landmarks and attractions.';
 
+    function getAIProvider() {
+        return localStorage.getItem(AI_PROVIDER_STORAGE) || 'google';
+    }
+
     function showAISheet() {
         var apiKey = localStorage.getItem(AI_KEY_STORAGE);
         if (!apiKey) {
@@ -1138,8 +1143,26 @@
     }
 
     function showAIKeyModal() {
-        document.getElementById('ai-key-input').value = localStorage.getItem(AI_KEY_STORAGE) || '';
+        var provider = getAIProvider();
+        var keyInput = document.getElementById('ai-key-input');
+        keyInput.value = localStorage.getItem(AI_KEY_STORAGE) || '';
+
+        // Update tab selection
+        document.querySelectorAll('.ai-provider-tab').forEach(function (tab) {
+            tab.classList.toggle('active', tab.dataset.provider === provider);
+        });
+        updateKeyPlaceholder(provider);
+
         document.getElementById('ai-key-modal').classList.remove('hidden');
+    }
+
+    function updateKeyPlaceholder(provider) {
+        var input = document.getElementById('ai-key-input');
+        if (provider === 'anthropic') {
+            input.placeholder = 'sk-ant-...';
+        } else {
+            input.placeholder = 'AIza...';
+        }
     }
 
     function hideAIKeyModal() {
@@ -1152,9 +1175,15 @@
             showToast('Please enter an API key');
             return;
         }
+
+        // Get selected provider from active tab
+        var activeTab = document.querySelector('.ai-provider-tab.active');
+        var provider = activeTab ? activeTab.dataset.provider : 'google';
+
         localStorage.setItem(AI_KEY_STORAGE, key);
+        localStorage.setItem(AI_PROVIDER_STORAGE, provider);
         hideAIKeyModal();
-        showToast('API key saved');
+        showToast('Settings saved (' + (provider === 'google' ? 'Gemini' : 'Claude') + ')');
 
         // If AI sheet isn't open yet, open it now
         var aiSheet = document.getElementById('ai-sheet');
@@ -1225,52 +1254,17 @@
         document.getElementById('ai-input-section').classList.add('hidden');
         document.getElementById('ai-loading').classList.remove('hidden');
 
-        // Build messages
-        var userContent = [];
-        if (text) {
-            userContent.push({ type: 'text', text: 'Extract location info from this:\n\n' + text });
-        }
-        if (aiImageData) {
-            if (!text) {
-                userContent.push({ type: 'text', text: 'Extract location info from this image:' });
-            }
-            userContent.push({
-                type: 'image_url',
-                image_url: { url: aiImageData, detail: 'high' }
-            });
+        var provider = getAIProvider();
+        var request;
+
+        if (provider === 'anthropic') {
+            request = callAnthropic(apiKey, text, aiImageData);
+        } else {
+            request = callGemini(apiKey, text, aiImageData);
         }
 
-        var body = {
-            model: 'gpt-4o',
-            messages: [
-                { role: 'system', content: AI_SYSTEM_PROMPT },
-                { role: 'user', content: userContent }
-            ],
-            max_tokens: 4000,
-            temperature: 0.1
-        };
-
-        fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + apiKey
-            },
-            body: JSON.stringify(body)
-        })
-        .then(function (response) {
-            if (!response.ok) {
-                return response.json().then(function (err) {
-                    throw new Error(err.error && err.error.message ? err.error.message : 'API request failed (' + response.status + ')');
-                });
-            }
-            return response.json();
-        })
-        .then(function (data) {
-            var content = data.choices[0].message.content;
-            // Strip markdown code fences if present
-            content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-            var parsed = JSON.parse(content);
+        request
+        .then(function (parsed) {
             if (!Array.isArray(parsed)) parsed = [parsed];
             aiExtractedLocations = parsed;
             showAIResults(parsed);
@@ -1279,6 +1273,124 @@
             document.getElementById('ai-loading').classList.add('hidden');
             document.getElementById('ai-input-section').classList.remove('hidden');
             showToast('Error: ' + err.message);
+        });
+    }
+
+    // --- Google Gemini API ---
+    function callGemini(apiKey, text, imageData) {
+        var parts = [];
+        var userText = 'Extract location info from this';
+        if (imageData && !text) userText += ' image';
+        userText += ':\n\n';
+        if (text) userText += text;
+
+        parts.push({ text: AI_SYSTEM_PROMPT + '\n\n' + userText });
+
+        if (imageData) {
+            // imageData is a data URL like "data:image/png;base64,iVBOR..."
+            var commaIdx = imageData.indexOf(',');
+            var meta = imageData.substring(0, commaIdx); // "data:image/png;base64"
+            var mimeType = meta.replace('data:', '').replace(';base64', '');
+            var base64 = imageData.substring(commaIdx + 1);
+
+            parts.push({
+                inline_data: {
+                    mime_type: mimeType,
+                    data: base64
+                }
+            });
+        }
+
+        var body = {
+            contents: [{ parts: parts }],
+            generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 4000
+            }
+        };
+
+        var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey;
+
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(function (response) {
+            if (!response.ok) {
+                return response.json().then(function (err) {
+                    var msg = (err.error && err.error.message) ? err.error.message : 'Gemini API error (' + response.status + ')';
+                    throw new Error(msg);
+                });
+            }
+            return response.json();
+        })
+        .then(function (data) {
+            var content = data.candidates[0].content.parts[0].text;
+            content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+            return JSON.parse(content);
+        });
+    }
+
+    // --- Anthropic Claude API ---
+    function callAnthropic(apiKey, text, imageData) {
+        var userContent = [];
+        var userText = 'Extract location info from this';
+        if (imageData && !text) userText += ' image';
+        userText += ':\n\n';
+        if (text) userText += text;
+
+        userContent.push({ type: 'text', text: userText });
+
+        if (imageData) {
+            var commaIdx = imageData.indexOf(',');
+            var meta = imageData.substring(0, commaIdx);
+            var mediaType = meta.replace('data:', '').replace(';base64', '');
+            var base64 = imageData.substring(commaIdx + 1);
+
+            userContent.push({
+                type: 'image',
+                source: {
+                    type: 'base64',
+                    media_type: mediaType,
+                    data: base64
+                }
+            });
+        }
+
+        var body = {
+            model: 'claude-sonnet-4-5-20250929',
+            max_tokens: 4000,
+            system: AI_SYSTEM_PROMPT,
+            messages: [{
+                role: 'user',
+                content: userContent
+            }]
+        };
+
+        return fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true'
+            },
+            body: JSON.stringify(body)
+        })
+        .then(function (response) {
+            if (!response.ok) {
+                return response.json().then(function (err) {
+                    var msg = (err.error && err.error.message) ? err.error.message : 'Claude API error (' + response.status + ')';
+                    throw new Error(msg);
+                });
+            }
+            return response.json();
+        })
+        .then(function (data) {
+            var content = data.content[0].text;
+            content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+            return JSON.parse(content);
         });
     }
 
@@ -1488,6 +1600,19 @@
 
         // Listen for paste events (image paste into AI sheet)
         document.addEventListener('paste', handleAIPaste);
+
+        // Provider tab switching in settings modal
+        document.querySelectorAll('.ai-provider-tab').forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                document.querySelectorAll('.ai-provider-tab').forEach(function (t) {
+                    t.classList.remove('active');
+                });
+                tab.classList.add('active');
+                updateKeyPlaceholder(tab.dataset.provider);
+                // Clear key input when switching providers so user enters the right key
+                document.getElementById('ai-key-input').value = '';
+            });
+        });
 
         // Handle sheet drag to dismiss (simple swipe-down)
         document.querySelectorAll('.sheet-handle').forEach(function (handle) {

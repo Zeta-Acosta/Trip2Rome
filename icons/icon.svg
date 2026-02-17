@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#2C1810"/>
+  <g transform="translate(256,200)">
+    <circle r="72" fill="#D84315"/>
+    <circle r="60" fill="#D84315" stroke="#fff" stroke-width="6"/>
+    <polygon points="0,60 -18,95 18,95" fill="#D84315"/>
+    <polygon points="0,68 -12,90 12,90" fill="#D84315"/>
+  </g>
+  <text x="256" y="222" text-anchor="middle" fill="#fff" font-size="72" font-weight="bold" font-family="sans-serif">R</text>
+  <text x="256" y="400" text-anchor="middle" fill="#FF9800" font-size="56" font-weight="700" font-family="sans-serif">ROME</text>
+</svg>

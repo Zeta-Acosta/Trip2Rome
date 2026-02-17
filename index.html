@@ -44,6 +44,11 @@
         </div>
     </header>
 
+    <!-- Day Tabs -->
+    <div id="day-tabs" class="day-tabs">
+        <button class="day-tab active" data-day="all">All</button>
+    </div>
+
     <!-- Map Container -->
     <div id="map"></div>
 
@@ -232,6 +237,29 @@
             <div class="sheet-actions">
                 <button type="button" id="btn-key-cancel" class="action-btn">Cancel</button>
                 <button type="button" id="btn-key-save" class="action-btn primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trip Settings Modal -->
+    <div id="trip-settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Trip Dates</h3>
+            <p class="trip-settings-hint">Set your travel dates to enable daily planning.</p>
+            <div class="form-row">
+                <div class="form-group half">
+                    <label for="trip-start-date">Start</label>
+                    <input type="date" id="trip-start-date">
+                </div>
+                <div class="form-group half">
+                    <label for="trip-end-date">End</label>
+                    <input type="date" id="trip-end-date">
+                </div>
+            </div>
+            <div class="sheet-actions">
+                <button type="button" id="btn-trip-cancel" class="action-btn">Cancel</button>
+                <button type="button" id="btn-trip-clear" class="action-btn danger">Clear</button>
+                <button type="button" id="btn-trip-save" class="action-btn primary">Save</button>
             </div>
         </div>
     </div>

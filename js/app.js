@@ -7,6 +7,8 @@
     var ROME_CENTER = [41.9028, 12.4964];
     var DEFAULT_ZOOM = 13;
     var STORAGE_KEY = 'trip2rome_locations';
+    var TRIP_DATES_KEY = 'trip2rome_trip_dates';
+    var DAY_ORDER_KEY = 'trip2rome_day_order';
     var AI_KEY_STORAGE = 'trip2rome_ai_key';
     var AI_PROVIDER_STORAGE = 'trip2rome_ai_provider';
 
@@ -94,6 +96,11 @@
     var tempMarker = null;
     var positionMarker = null;
 
+    // Day planning state
+    var selectedDay = 'all'; // 'all' or 'YYYY-MM-DD'
+    var tripDates = null; // { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }
+    var dayOrders = {}; // { 'YYYY-MM-DD': ['loc_id1', 'loc_id2', ...] }
+
     // AI state
     var aiImageData = null;
     var aiExtractedLocations = [];
@@ -125,8 +132,11 @@
     // Initialization
     // =========================================================================
     function init() {
+        loadTripDates();
+        loadDayOrders();
         initMap();
         loadLocations();
+        buildDayTabs();
         renderAllMarkers();
         buildCategorySelector();
         buildFilterChips();
@@ -186,21 +196,54 @@
     function addLocation(loc) {
         locations.push(loc);
         saveLocations();
-        addMarker(loc);
+        // Add to day order if it has a date
+        if (loc.date && dayOrders[loc.date]) {
+            dayOrders[loc.date].push(loc.id);
+            saveDayOrders();
+        }
+        // Only add marker if visible in current day filter
+        if (selectedDay === 'all' || loc.date === selectedDay) {
+            addMarker(loc);
+        }
         if (routeVisible) drawRoute();
     }
 
     function updateLocation(id, data) {
         var idx = locations.findIndex(function (l) { return l.id === id; });
         if (idx === -1) return;
+        var oldDate = locations[idx].date;
         Object.assign(locations[idx], data);
         saveLocations();
+
+        // Update day orders if date changed
+        var newDate = locations[idx].date;
+        if (oldDate !== newDate) {
+            // Remove from old day order
+            if (oldDate && dayOrders[oldDate]) {
+                dayOrders[oldDate] = dayOrders[oldDate].filter(function (lid) { return lid !== id; });
+            }
+            // Add to new day order
+            if (newDate && dayOrders[newDate]) {
+                dayOrders[newDate].push(id);
+            }
+            saveDayOrders();
+        }
+
         removeMarker(id);
-        addMarker(locations[idx]);
+        // Only re-add marker if visible in current day filter
+        if (selectedDay === 'all' || locations[idx].date === selectedDay) {
+            addMarker(locations[idx]);
+        }
         if (routeVisible) drawRoute();
     }
 
     function deleteLocation(id) {
+        // Remove from day orders
+        Object.keys(dayOrders).forEach(function (day) {
+            dayOrders[day] = dayOrders[day].filter(function (lid) { return lid !== id; });
+        });
+        saveDayOrders();
+
         locations = locations.filter(function (l) { return l.id !== id; });
         saveLocations();
         removeMarker(id);
@@ -255,16 +298,16 @@
         });
         markers = {};
 
-        // Add filtered
+        // Add filtered (respecting day selection)
         locations.forEach(function (loc) {
-            if (activeFilters[loc.category]) {
-                addMarker(loc);
-            }
+            if (!activeFilters[loc.category]) return;
+            if (selectedDay !== 'all' && loc.date !== selectedDay) return;
+            addMarker(loc);
         });
     }
 
     function fitAllMarkers() {
-        var visible = locations.filter(function (l) { return activeFilters[l.category]; });
+        var visible = getVisibleLocations();
         if (visible.length === 0) return;
         var bounds = L.latLngBounds(visible.map(function (l) { return [l.lat, l.lng]; }));
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
@@ -414,31 +457,59 @@
 
     function renderList() {
         var list = document.getElementById('location-list');
-        var filtered = locations.filter(function (l) { return activeFilters[l.category]; });
+        var filtered;
+        var isDayView = selectedDay !== 'all';
 
-        // Sort: by date/time if set, then alphabetically
-        filtered.sort(function (a, b) {
-            if (a.date && b.date && a.date !== b.date) return a.date < b.date ? -1 : 1;
-            if (a.date && !b.date) return -1;
-            if (!a.date && b.date) return 1;
-            if (a.date === b.date && a.time && b.time) return a.time < b.time ? -1 : 1;
-            return a.name.localeCompare(b.name);
-        });
+        if (isDayView) {
+            filtered = getOrderedLocationsForDay(selectedDay);
+        } else {
+            filtered = locations.filter(function (l) { return activeFilters[l.category]; });
+            // Sort: by date/time if set, then alphabetically
+            filtered.sort(function (a, b) {
+                if (a.date && b.date && a.date !== b.date) return a.date < b.date ? -1 : 1;
+                if (a.date && !b.date) return -1;
+                if (!a.date && b.date) return 1;
+                if (a.date === b.date && a.time && b.time) return a.time < b.time ? -1 : 1;
+                return a.name.localeCompare(b.name);
+            });
+        }
 
         if (filtered.length === 0) {
-            list.innerHTML = '<div class="list-empty">No locations match your filters</div>';
+            list.innerHTML = '<div class="list-empty">No locations' + (isDayView ? ' for this day' : ' match your filters') + '</div>';
             return;
         }
 
         list.innerHTML = '';
-        filtered.forEach(function (loc) {
+
+        // Drag-to-reorder hint for day view
+        if (isDayView && filtered.length > 1) {
+            var hint = document.createElement('div');
+            hint.className = 'day-order-hint';
+            hint.textContent = 'Drag to reorder stops';
+            list.appendChild(hint);
+        }
+
+        filtered.forEach(function (loc, index) {
             var cat = CATEGORIES[loc.category] || CATEGORIES.custom;
             var detail = loc.address || '';
-            if (loc.date) detail = formatDate(loc.date) + (loc.time ? ' ' + loc.time : '') + (detail ? ' - ' + detail : '');
+            if (isDayView) {
+                // In day view, show time + address (no date since day is clear)
+                if (loc.time) detail = loc.time + (detail ? ' - ' + detail : '');
+            } else {
+                if (loc.date) detail = formatDate(loc.date) + (loc.time ? ' ' + loc.time : '') + (detail ? ' - ' + detail : '');
+            }
 
             var item = document.createElement('div');
-            item.className = 'loc-item';
+            item.className = 'loc-item' + (isDayView ? ' draggable' : '');
+            item.dataset.locationId = loc.id;
+            item.dataset.index = index;
+
+            var dragHandle = isDayView
+                ? '<span class="drag-handle"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></span>'
+                : '';
+
             item.innerHTML =
+                dragHandle +
                 '<span class="loc-dot" style="background:' + cat.color + '"></span>' +
                 '<div class="loc-info">' +
                 '  <div class="loc-name">' + escapeHtml(loc.name) + '</div>' +
@@ -446,7 +517,9 @@
                 '</div>' +
                 '<span class="loc-arrow">&rsaquo;</span>';
 
-            item.addEventListener('click', function () {
+            item.addEventListener('click', function (e) {
+                // Don't navigate if drag handle was clicked
+                if (e.target.closest('.drag-handle')) return;
                 hideAllSheets();
                 map.setView([loc.lat, loc.lng], 16);
                 setTimeout(function () { showDetail(loc.id); }, 350);
@@ -454,6 +527,11 @@
 
             list.appendChild(item);
         });
+
+        // Setup drag-to-reorder for day view
+        if (isDayView && filtered.length > 1) {
+            setupDragReorder(list);
+        }
     }
 
     function buildFilterChips() {
@@ -478,6 +556,108 @@
 
             container.appendChild(chip);
         });
+    }
+
+    // =========================================================================
+    // Drag-to-Reorder (touch and mouse)
+    // =========================================================================
+    function setupDragReorder(listEl) {
+        var dragItem = null;
+        var dragStartY = 0;
+        var items;
+
+        function getItems() {
+            return Array.prototype.slice.call(listEl.querySelectorAll('.loc-item.draggable'));
+        }
+
+        function onDragStart(e, item) {
+            dragItem = item;
+            dragItem.classList.add('dragging');
+            items = getItems();
+
+            if (e.type === 'touchstart') {
+                dragStartY = e.touches[0].clientY;
+            } else {
+                dragStartY = e.clientY;
+                e.preventDefault();
+            }
+        }
+
+        function onDragMove(e) {
+            if (!dragItem) return;
+
+            var clientY;
+            if (e.type === 'touchmove') {
+                clientY = e.touches[0].clientY;
+                e.preventDefault();
+            } else {
+                clientY = e.clientY;
+            }
+
+            // Find which item we're over
+            items.forEach(function (item) {
+                item.classList.remove('drag-over');
+                if (item === dragItem) return;
+
+                var rect = item.getBoundingClientRect();
+                var midY = rect.top + rect.height / 2;
+                if (clientY < midY && clientY > rect.top) {
+                    item.classList.add('drag-over');
+                }
+            });
+        }
+
+        function onDragEnd(e) {
+            if (!dragItem) return;
+
+            // Find the target position
+            var targetItem = null;
+            items.forEach(function (item) {
+                if (item.classList.contains('drag-over')) {
+                    targetItem = item;
+                }
+                item.classList.remove('drag-over');
+            });
+
+            dragItem.classList.remove('dragging');
+
+            if (targetItem && targetItem !== dragItem) {
+                // Reorder in the DOM
+                listEl.insertBefore(dragItem, targetItem);
+
+                // Save the new order
+                var newOrder = [];
+                listEl.querySelectorAll('.loc-item.draggable').forEach(function (item) {
+                    newOrder.push(item.dataset.locationId);
+                });
+
+                dayOrders[selectedDay] = newOrder;
+                saveDayOrders();
+
+                // Redraw route if visible
+                if (routeVisible) drawRoute();
+            }
+
+            dragItem = null;
+        }
+
+        // Attach events to drag handles
+        listEl.querySelectorAll('.drag-handle').forEach(function (handle) {
+            var item = handle.closest('.loc-item');
+
+            handle.addEventListener('touchstart', function (e) {
+                onDragStart(e, item);
+            }, { passive: true });
+
+            handle.addEventListener('mousedown', function (e) {
+                onDragStart(e, item);
+            });
+        });
+
+        listEl.addEventListener('touchmove', onDragMove, { passive: false });
+        listEl.addEventListener('mousemove', onDragMove);
+        listEl.addEventListener('touchend', onDragEnd);
+        listEl.addEventListener('mouseup', onDragEnd);
     }
 
     // =========================================================================
@@ -558,16 +738,22 @@
     function drawRoute() {
         clearRoute();
 
-        var visible = locations
-            .filter(function (l) { return activeFilters[l.category]; })
-            .sort(function (a, b) {
-                // Sort by date/time, then put undated at end
-                if (a.date && b.date && a.date !== b.date) return a.date < b.date ? -1 : 1;
-                if (a.date && !b.date) return -1;
-                if (!a.date && b.date) return 1;
-                if (a.time && b.time) return a.time < b.time ? -1 : 1;
-                return 0;
-            });
+        var visible;
+        if (selectedDay !== 'all') {
+            // Use custom day order if available
+            visible = getOrderedLocationsForDay(selectedDay);
+        } else {
+            visible = locations
+                .filter(function (l) { return activeFilters[l.category]; })
+                .sort(function (a, b) {
+                    // Sort by date/time, then put undated at end
+                    if (a.date && b.date && a.date !== b.date) return a.date < b.date ? -1 : 1;
+                    if (a.date && !b.date) return -1;
+                    if (!a.date && b.date) return 1;
+                    if (a.time && b.time) return a.time < b.time ? -1 : 1;
+                    return 0;
+                });
+        }
 
         if (visible.length < 2) {
             document.getElementById('route-info').textContent = 'Need 2+ locations for a route';
@@ -618,15 +804,20 @@
     }
 
     function openRouteInGoogleMaps() {
-        var visible = locations
-            .filter(function (l) { return activeFilters[l.category]; })
-            .sort(function (a, b) {
-                if (a.date && b.date && a.date !== b.date) return a.date < b.date ? -1 : 1;
-                if (a.date && !b.date) return -1;
-                if (!a.date && b.date) return 1;
-                if (a.time && b.time) return a.time < b.time ? -1 : 1;
-                return 0;
-            });
+        var visible;
+        if (selectedDay !== 'all') {
+            visible = getOrderedLocationsForDay(selectedDay);
+        } else {
+            visible = locations
+                .filter(function (l) { return activeFilters[l.category]; })
+                .sort(function (a, b) {
+                    if (a.date && b.date && a.date !== b.date) return a.date < b.date ? -1 : 1;
+                    if (a.date && !b.date) return -1;
+                    if (!a.date && b.date) return 1;
+                    if (a.time && b.time) return a.time < b.time ? -1 : 1;
+                    return 0;
+                });
+        }
 
         if (visible.length < 2) return;
 
@@ -1100,6 +1291,201 @@
         var div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    }
+
+    // =========================================================================
+    // Trip Dates & Day Planning
+    // =========================================================================
+    function loadTripDates() {
+        try {
+            var stored = JSON.parse(localStorage.getItem(TRIP_DATES_KEY));
+            if (stored && stored.start && stored.end) {
+                tripDates = stored;
+            }
+        } catch (e) { /* ignore */ }
+
+        // Default: Feb 17-20, 2026
+        if (!tripDates) {
+            tripDates = { start: '2026-02-17', end: '2026-02-20' };
+            saveTripDates();
+        }
+    }
+
+    function saveTripDates() {
+        try { localStorage.setItem(TRIP_DATES_KEY, JSON.stringify(tripDates)); } catch (e) { /* ignore */ }
+    }
+
+    function loadDayOrders() {
+        try {
+            var stored = JSON.parse(localStorage.getItem(DAY_ORDER_KEY));
+            if (stored) dayOrders = stored;
+        } catch (e) { /* ignore */ }
+    }
+
+    function saveDayOrders() {
+        try { localStorage.setItem(DAY_ORDER_KEY, JSON.stringify(dayOrders)); } catch (e) { /* ignore */ }
+    }
+
+    function getTripDays() {
+        if (!tripDates || !tripDates.start || !tripDates.end) return [];
+        var days = [];
+        var current = new Date(tripDates.start + 'T00:00:00');
+        var end = new Date(tripDates.end + 'T00:00:00');
+        while (current <= end) {
+            days.push(formatISODate(current));
+            current.setDate(current.getDate() + 1);
+        }
+        return days;
+    }
+
+    function formatISODate(date) {
+        var y = date.getFullYear();
+        var m = ('0' + (date.getMonth() + 1)).slice(-2);
+        var d = ('0' + date.getDate()).slice(-2);
+        return y + '-' + m + '-' + d;
+    }
+
+    function formatDayTabLabel(dateStr) {
+        var d = new Date(dateStr + 'T00:00:00');
+        var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return days[d.getDay()] + ' ' + d.getDate();
+    }
+
+    function buildDayTabs() {
+        var container = document.getElementById('day-tabs');
+        container.innerHTML = '';
+
+        // "All" tab
+        var allTab = document.createElement('button');
+        allTab.className = 'day-tab' + (selectedDay === 'all' ? ' active' : '');
+        allTab.dataset.day = 'all';
+        allTab.textContent = 'All';
+        allTab.addEventListener('click', function () { selectDay('all'); });
+        container.appendChild(allTab);
+
+        // Day tabs
+        var days = getTripDays();
+        days.forEach(function (dateStr) {
+            var tab = document.createElement('button');
+            tab.className = 'day-tab' + (selectedDay === dateStr ? ' active' : '');
+            tab.dataset.day = dateStr;
+            tab.textContent = formatDayTabLabel(dateStr);
+            tab.addEventListener('click', function () { selectDay(dateStr); });
+            container.appendChild(tab);
+        });
+
+        // Settings gear button
+        var gearBtn = document.createElement('button');
+        gearBtn.className = 'day-tab-settings';
+        gearBtn.title = 'Trip Dates';
+        gearBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
+        gearBtn.addEventListener('click', showTripSettingsModal);
+        container.appendChild(gearBtn);
+    }
+
+    function selectDay(day) {
+        selectedDay = day;
+
+        // Update tab UI
+        document.querySelectorAll('.day-tab').forEach(function (tab) {
+            tab.classList.toggle('active', tab.dataset.day === day);
+        });
+
+        // Re-render everything for the selected day
+        renderAllMarkers();
+        if (routeVisible) drawRoute();
+    }
+
+    function getVisibleLocations() {
+        return locations.filter(function (l) {
+            if (!activeFilters[l.category]) return false;
+            if (selectedDay !== 'all' && l.date !== selectedDay) return false;
+            return true;
+        });
+    }
+
+    function getOrderedLocationsForDay(dateStr) {
+        var dayLocs = locations.filter(function (l) {
+            if (!activeFilters[l.category]) return false;
+            return l.date === dateStr;
+        });
+
+        var order = dayOrders[dateStr];
+        if (order && order.length > 0) {
+            // Sort by custom order; items not in order go at the end
+            dayLocs.sort(function (a, b) {
+                var ai = order.indexOf(a.id);
+                var bi = order.indexOf(b.id);
+                if (ai === -1) ai = 9999;
+                if (bi === -1) bi = 9999;
+                return ai - bi;
+            });
+        } else {
+            // Default sort by time
+            dayLocs.sort(function (a, b) {
+                if (a.time && b.time) return a.time < b.time ? -1 : (a.time > b.time ? 1 : 0);
+                if (a.time && !b.time) return -1;
+                if (!a.time && b.time) return 1;
+                return 0;
+            });
+        }
+
+        return dayLocs;
+    }
+
+    // =========================================================================
+    // Trip Settings Modal
+    // =========================================================================
+    function showTripSettingsModal() {
+        document.getElementById('trip-start-date').value = tripDates ? tripDates.start : '';
+        document.getElementById('trip-end-date').value = tripDates ? tripDates.end : '';
+        document.getElementById('trip-settings-modal').classList.remove('hidden');
+    }
+
+    function hideTripSettingsModal() {
+        document.getElementById('trip-settings-modal').classList.add('hidden');
+    }
+
+    function saveTripSettings() {
+        var start = document.getElementById('trip-start-date').value;
+        var end = document.getElementById('trip-end-date').value;
+
+        if (!start || !end) {
+            showToast('Please set both dates');
+            return;
+        }
+
+        if (start > end) {
+            showToast('Start date must be before end date');
+            return;
+        }
+
+        // Limit to max 14 days
+        var startD = new Date(start + 'T00:00:00');
+        var endD = new Date(end + 'T00:00:00');
+        var diff = (endD - startD) / (1000 * 60 * 60 * 24);
+        if (diff > 14) {
+            showToast('Maximum 14 days supported');
+            return;
+        }
+
+        tripDates = { start: start, end: end };
+        saveTripDates();
+        selectedDay = 'all';
+        buildDayTabs();
+        hideTripSettingsModal();
+        showToast('Trip dates updated');
+    }
+
+    function clearTripSettings() {
+        tripDates = null;
+        localStorage.removeItem(TRIP_DATES_KEY);
+        selectedDay = 'all';
+        buildDayTabs();
+        renderAllMarkers();
+        if (routeVisible) drawRoute();
+        hideTripSettingsModal();
+        showToast('Trip dates cleared');
     }
 
     // =========================================================================
@@ -1614,6 +2000,11 @@
                 document.getElementById('ai-key-input').value = '';
             });
         });
+
+        // Trip Settings Modal
+        document.getElementById('btn-trip-save').addEventListener('click', saveTripSettings);
+        document.getElementById('btn-trip-cancel').addEventListener('click', hideTripSettingsModal);
+        document.getElementById('btn-trip-clear').addEventListener('click', clearTripSettings);
 
         // Handle sheet drag to dismiss (simple swipe-down)
         document.querySelectorAll('.sheet-handle').forEach(function (handle) {

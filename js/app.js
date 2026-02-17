@@ -327,14 +327,11 @@
         document.getElementById('detail-address').textContent = loc.address || '';
         document.getElementById('detail-notes').textContent = loc.notes || '';
 
-        var dt = '';
-        if (loc.date) {
-            dt = formatDate(loc.date);
-            if (loc.time) dt += ' at ' + loc.time;
-        } else if (loc.time) {
-            dt = 'Time: ' + loc.time;
-        }
-        document.getElementById('detail-datetime').textContent = dt;
+        // Build day chips
+        buildDetailDayChips(loc);
+
+        // Set time input
+        document.getElementById('detail-time-input').value = loc.time || '';
 
         // Store which location is shown
         document.getElementById('detail-sheet').dataset.locationId = id;
@@ -343,6 +340,55 @@
 
         // Center map on location
         map.panTo([loc.lat, loc.lng]);
+    }
+
+    function buildDetailDayChips(loc) {
+        var container = document.getElementById('detail-day-chips');
+        container.innerHTML = '';
+        var days = getTripDays();
+
+        // "None" chip to unassign
+        var noneChip = document.createElement('button');
+        noneChip.type = 'button';
+        noneChip.className = 'detail-day-chip' + (!loc.date ? ' selected' : '');
+        noneChip.textContent = '—';
+        noneChip.title = 'No day';
+        noneChip.addEventListener('click', function () {
+            applyDetailDay(loc.id, '');
+        });
+        container.appendChild(noneChip);
+
+        days.forEach(function (dateStr) {
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'detail-day-chip' + (loc.date === dateStr ? ' selected' : '');
+            var d = new Date(dateStr + 'T00:00:00');
+            var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            chip.textContent = dayNames[d.getDay()] + ' ' + d.getDate();
+            chip.addEventListener('click', function () {
+                applyDetailDay(loc.id, dateStr);
+            });
+            container.appendChild(chip);
+        });
+    }
+
+    function applyDetailDay(id, dateStr) {
+        updateLocation(id, { date: dateStr });
+        // Refresh chips to show new selection
+        var loc = getLocation(id);
+        if (loc) buildDetailDayChips(loc);
+        // Refresh list if open
+        if (selectedDay !== 'all' && dateStr !== selectedDay) {
+            renderAllMarkers();
+        }
+    }
+
+    function setupDetailTimeInput() {
+        document.getElementById('detail-time-input').addEventListener('change', function () {
+            var id = document.getElementById('detail-sheet').dataset.locationId;
+            if (!id) return;
+            updateLocation(id, { time: this.value });
+        });
     }
 
     // =========================================================================
@@ -1935,6 +1981,9 @@
 
         // Overlay click - close sheets
         document.getElementById('overlay').addEventListener('click', hideAllSheets);
+
+        // Detail sheet: day/time picker
+        setupDetailTimeInput();
 
         // Detail sheet actions
         document.getElementById('btn-navigate').addEventListener('click', function () {

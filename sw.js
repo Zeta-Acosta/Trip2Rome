@@ -1,4 +1,4 @@
-var CACHE_NAME = 'trip2rome-v2';
+var CACHE_NAME = 'trip2rome-v3';
 var TILE_CACHE = 'trip2rome-tiles';
 
 var APP_SHELL = [

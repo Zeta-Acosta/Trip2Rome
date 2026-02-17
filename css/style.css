@@ -557,6 +557,9 @@ html, body {
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     transition: opacity 0.3s, transform 0.3s;
     white-space: nowrap;
+    max-width: calc(100vw - 40px);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .toast.show {

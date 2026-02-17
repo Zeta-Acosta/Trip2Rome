@@ -1272,7 +1272,10 @@
         .catch(function (err) {
             document.getElementById('ai-loading').classList.add('hidden');
             document.getElementById('ai-input-section').classList.remove('hidden');
-            showToast('Error: ' + err.message);
+            var msg = err.message || 'Unknown error';
+            // Truncate long API error messages
+            if (msg.length > 60) msg = msg.substring(0, 60) + '...';
+            showToast('Error: ' + msg);
         });
     }
 

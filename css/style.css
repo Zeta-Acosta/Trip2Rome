@@ -650,6 +650,48 @@ html, body {
     font-size: 18px !important;
 }
 
+/* === Live Tracking === */
+#btn-live-track {
+    position: relative;
+}
+
+#btn-live-track .tracking-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4CAF50;
+    display: none;
+}
+
+#btn-live-track.active .tracking-badge {
+    display: block;
+    animation: badgePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.8); }
+}
+
+@keyframes trackingDotPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
 /* === Route Lines === */
 .route-distance-label {
     background: none;

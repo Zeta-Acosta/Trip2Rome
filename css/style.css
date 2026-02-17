@@ -65,10 +65,75 @@ html, body {
     color: #FF9800;
 }
 
+/* === Day Tabs === */
+.day-tabs {
+    position: fixed;
+    top: 52px;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    height: 40px;
+    background: #3E2723;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.day-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.day-tab {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 18px;
+    background: transparent;
+    color: rgba(255,255,255,0.6);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.day-tab:active {
+    background: rgba(255,255,255,0.1);
+}
+
+.day-tab.active {
+    background: rgba(255,255,255,0.2);
+    color: #fff;
+}
+
+.day-tab-settings {
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 6px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: rgba(255,255,255,0.5);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.day-tab-settings:active {
+    background: rgba(255,255,255,0.1);
+}
+
 /* === Map === */
 #map {
     position: fixed;
-    top: 52px;
+    top: 92px;
     bottom: 0;
     left: 0;
     right: 0;
@@ -164,7 +229,7 @@ html, body {
 #add-mode-banner,
 #route-bar {
     position: fixed;
-    top: 52px;
+    top: 92px;
     left: 0;
     right: 0;
     z-index: 999;
@@ -945,6 +1010,52 @@ html, body {
 .ai-provider-tab.active {
     background: #5C6BC0;
     color: #fff;
+}
+
+/* === Trip Settings Modal === */
+.trip-settings-hint {
+    font-size: 0.82rem;
+    color: #888;
+    margin-bottom: 16px;
+    line-height: 1.4;
+}
+
+/* === Drag-to-Reorder in List === */
+.loc-item.draggable {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.loc-item .drag-handle {
+    flex-shrink: 0;
+    padding: 4px 2px;
+    color: #bbb;
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    touch-action: none;
+}
+
+.loc-item .drag-handle:active {
+    cursor: grabbing;
+}
+
+.loc-item.dragging {
+    opacity: 0.5;
+    background: #f0f0f0;
+}
+
+.loc-item.drag-over {
+    border-top: 2px solid #D84315;
+}
+
+.day-order-hint {
+    font-size: 0.78rem;
+    color: #999;
+    text-align: center;
+    padding: 8px 0 4px;
+    font-style: italic;
 }
 
 /* === Route Lines === */

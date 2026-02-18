@@ -373,6 +373,7 @@ html, body {
     transform: translateY(100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    will-change: transform;
 }
 
 .bottom-sheet.visible {
@@ -385,6 +386,37 @@ html, body {
     background: #ddd;
     border-radius: 2px;
     margin: 12px auto 8px;
+    cursor: grab;
+}
+
+/* === Sheet Close Button === */
+.sheet-close-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: #f0f0f0;
+    color: #666;
+    font-size: 20px;
+    line-height: 32px;
+    text-align: center;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 1;
+    transition: background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sheet-close-btn:active {
+    background: #ddd;
+}
+
+/* === Sheet Drag State === */
+.bottom-sheet.dragging {
+    transition: none !important;
+    overflow-y: hidden !important;
 }
 
 .sheet-content {

@@ -1308,7 +1308,9 @@
             window.location.reload();
         });
 
-        navigator.serviceWorker.register('sw.js').then(function (reg) {
+        navigator.serviceWorker.register('sw.js?v=8').then(function (reg) {
+            // Check for SW updates on every page load
+            reg.update();
             // Listen for download progress messages
             navigator.serviceWorker.addEventListener('message', function (e) {
                 if (e.data.type === 'DOWNLOAD_PROGRESS') {

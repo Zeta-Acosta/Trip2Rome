@@ -2473,18 +2473,103 @@
         document.getElementById('btn-firebase-save').addEventListener('click', saveFirebaseConfig);
         document.getElementById('btn-firebase-cancel').addEventListener('click', hideFirebaseSetupModal);
 
-        // Handle sheet drag to dismiss (simple swipe-down)
-        document.querySelectorAll('.sheet-handle').forEach(function (handle) {
+        // Close buttons on bottom sheets
+        document.querySelectorAll('.sheet-close-btn').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                hideAllSheets();
+            });
+        });
+
+        // Pull-down drag-to-dismiss for bottom sheets
+        document.querySelectorAll('.bottom-sheet').forEach(function (sheet) {
             var startY = 0;
-            handle.addEventListener('touchstart', function (e) {
+            var currentY = 0;
+            var isDragging = false;
+            var sheetHeight = 0;
+            var DISMISS_THRESHOLD = 0.3; // 30% of sheet height
+
+            function canDragSheet(target) {
+                // Always allow drag from handle or close button area
+                if (target.closest('.sheet-handle')) return true;
+                // Allow drag from sheet-content header area (h2, list-header, detail-header, filter-chips)
+                if (target.closest('.list-header') || target.closest('.detail-header') ||
+                    target.closest('.sheet-content > h2')) return true;
+                // Allow drag from scrollable list only when scrolled to top
+                var scrollable = sheet.querySelector('.location-list') ||
+                                 sheet.querySelector('.ai-results-list') || sheet;
+                if (scrollable && scrollable.scrollTop === 0 && !target.closest('.drag-handle')) return true;
+                return false;
+            }
+
+            function onTouchStart(e) {
+                if (!canDragSheet(e.target)) return;
                 startY = e.touches[0].clientY;
-            }, { passive: true });
-            handle.addEventListener('touchend', function (e) {
-                var endY = e.changedTouches[0].clientY;
-                if (endY - startY > 50) {
-                    hideAllSheets();
+                currentY = startY;
+                sheetHeight = sheet.offsetHeight;
+                isDragging = false;
+            }
+
+            function onTouchMove(e) {
+                if (startY === 0) return;
+                currentY = e.touches[0].clientY;
+                var deltaY = currentY - startY;
+
+                // Only drag downward
+                if (deltaY < 0) {
+                    deltaY = 0;
                 }
-            }, { passive: true });
+
+                // Start dragging after 10px threshold
+                if (deltaY > 10 && !isDragging) {
+                    isDragging = true;
+                    sheet.classList.add('dragging');
+                }
+
+                if (isDragging) {
+                    e.preventDefault();
+                    // Apply rubber-band resistance as it goes further
+                    var resistance = 1 - Math.min(deltaY / (sheetHeight * 2), 0.5);
+                    var translateY = deltaY * resistance;
+                    sheet.style.transform = 'translateY(' + translateY + 'px)';
+                }
+            }
+
+            function onTouchEnd() {
+                if (!isDragging) {
+                    startY = 0;
+                    return;
+                }
+
+                sheet.classList.remove('dragging');
+                var deltaY = currentY - startY;
+                var threshold = sheetHeight * DISMISS_THRESHOLD;
+
+                if (deltaY > threshold) {
+                    // Dismiss: animate out then hide
+                    sheet.style.transition = 'transform 0.25s cubic-bezier(0.4, 0, 1, 1)';
+                    sheet.style.transform = 'translateY(100%)';
+                    setTimeout(function () {
+                        sheet.style.transition = '';
+                        sheet.style.transform = '';
+                        hideAllSheets();
+                    }, 250);
+                } else {
+                    // Snap back with spring
+                    sheet.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2)';
+                    sheet.style.transform = 'translateY(0)';
+                    setTimeout(function () {
+                        sheet.style.transition = '';
+                    }, 300);
+                }
+
+                startY = 0;
+                isDragging = false;
+            }
+
+            sheet.addEventListener('touchstart', onTouchStart, { passive: true });
+            sheet.addEventListener('touchmove', onTouchMove, { passive: false });
+            sheet.addEventListener('touchend', onTouchEnd, { passive: true });
         });
     }
 

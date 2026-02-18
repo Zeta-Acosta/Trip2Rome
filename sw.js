@@ -1,4 +1,4 @@
-var CACHE_NAME = 'trip2rome-v5';
+var CACHE_NAME = 'trip2rome-v6';
 var TILE_CACHE = 'trip2rome-tiles';
 
 var APP_SHELL = [
@@ -20,7 +20,7 @@ self.addEventListener('install', function (event) {
     self.skipWaiting();
 });
 
-// Activate: clean old caches
+// Activate: clean old caches and force-reload all clients
 self.addEventListener('activate', function (event) {
     event.waitUntil(
         caches.keys().then(function (keys) {
@@ -31,6 +31,13 @@ self.addEventListener('activate', function (event) {
                     return caches.delete(k);
                 })
             );
+        }).then(function () {
+            // After cleaning caches, reload all open tabs so they get fresh assets
+            return self.clients.matchAll({ type: 'window' }).then(function (clients) {
+                clients.forEach(function (client) {
+                    client.navigate(client.url);
+                });
+            });
         })
     );
     self.clients.claim();

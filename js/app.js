@@ -1247,7 +1247,15 @@
     function registerSW() {
         if (!('serviceWorker' in navigator)) return;
 
-        navigator.serviceWorker.register('sw.js').then(function () {
+        // Auto-reload when a new service worker takes control
+        var refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+        });
+
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
             // Listen for download progress messages
             navigator.serviceWorker.addEventListener('message', function (e) {
                 if (e.data.type === 'DOWNLOAD_PROGRESS') {
@@ -1256,6 +1264,9 @@
                     onDownloadComplete(e.data.total);
                 }
             });
+
+            // When a new SW is found and installs, it will skipWaiting+claim,
+            // which triggers controllerchange above → auto-reload
         }).catch(function (err) {
             console.warn('SW registration failed:', err);
         });

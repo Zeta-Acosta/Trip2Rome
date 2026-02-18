@@ -11,6 +11,8 @@
     var DAY_ORDER_KEY = 'trip2rome_day_order';
     var AI_KEY_STORAGE = 'trip2rome_ai_key';
     var AI_PROVIDER_STORAGE = 'trip2rome_ai_provider';
+    var FIREBASE_URL_KEY = 'trip2rome_firebase_url';
+    var COLLAB_TRIP_KEY = 'trip2rome_collab_trip';
 
     var CATEGORIES = {
         accommodation: { label: 'Stay',       color: '#1565C0', icon: '\u{1F3E0}' },
@@ -105,6 +107,12 @@
     var aiImageData = null;
     var aiExtractedLocations = [];
 
+    // Collaboration state
+    var firebaseUrl = null;
+    var collabCode = null;
+    var collabStream = null;
+    var isSyncing = false;
+
     // Live tracking state
     var liveTracking = false;
     var watchId = null;
@@ -142,6 +150,7 @@
         buildFilterChips();
         setupEvents();
         registerSW();
+        initCollab();
         fitAllMarkers();
     }
 
@@ -187,6 +196,7 @@
 
     function saveLocations() {
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(locations)); } catch (e) { /* ignore */ }
+        if (!isSyncing) syncToFirebase();
     }
 
     function getLocation(id) {
@@ -1370,6 +1380,7 @@
 
     function saveTripDates() {
         try { localStorage.setItem(TRIP_DATES_KEY, JSON.stringify(tripDates)); } catch (e) { /* ignore */ }
+        if (!isSyncing) syncToFirebase();
     }
 
     function loadDayOrders() {
@@ -1381,6 +1392,7 @@
 
     function saveDayOrders() {
         try { localStorage.setItem(DAY_ORDER_KEY, JSON.stringify(dayOrders)); } catch (e) { /* ignore */ }
+        if (!isSyncing) syncToFirebase();
     }
 
     function getTripDays() {
@@ -1543,6 +1555,314 @@
         if (routeVisible) drawRoute();
         hideTripSettingsModal();
         showToast('Trip dates cleared');
+    }
+
+    // =========================================================================
+    // Collaboration (Firebase Realtime Database via REST API)
+    // =========================================================================
+    function initCollab() {
+        firebaseUrl = localStorage.getItem(FIREBASE_URL_KEY) || null;
+        collabCode = localStorage.getItem(COLLAB_TRIP_KEY) || null;
+
+        if (firebaseUrl && collabCode) {
+            startListening();
+        }
+        updateCollabUI();
+    }
+
+    function generateTripCode() {
+        var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        var code = '';
+        for (var i = 0; i < 6; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return code;
+    }
+
+    function showCollabModal() {
+        if (!firebaseUrl) {
+            showFirebaseSetupModal();
+            return;
+        }
+        updateCollabUI();
+        document.getElementById('collab-modal').classList.remove('hidden');
+    }
+
+    function hideCollabModal() {
+        document.getElementById('collab-modal').classList.add('hidden');
+    }
+
+    function showFirebaseSetupModal() {
+        document.getElementById('firebase-url-input').value = firebaseUrl || '';
+        document.getElementById('firebase-setup-modal').classList.remove('hidden');
+    }
+
+    function hideFirebaseSetupModal() {
+        document.getElementById('firebase-setup-modal').classList.add('hidden');
+    }
+
+    function saveFirebaseConfig() {
+        var url = document.getElementById('firebase-url-input').value.trim();
+        if (!url) {
+            showToast('Please enter a database URL');
+            return;
+        }
+        // Strip trailing slash
+        url = url.replace(/\/+$/, '');
+        // Basic validation
+        if (url.indexOf('firebaseio.com') === -1 && url.indexOf('firebasedatabase.app') === -1) {
+            showToast('URL should be a Firebase Realtime Database URL');
+            return;
+        }
+
+        firebaseUrl = url;
+        localStorage.setItem(FIREBASE_URL_KEY, firebaseUrl);
+        hideFirebaseSetupModal();
+        showToast('Firebase configured');
+        showCollabModal();
+    }
+
+    function createSharedTrip() {
+        if (!firebaseUrl) return;
+
+        collabCode = generateTripCode();
+        localStorage.setItem(COLLAB_TRIP_KEY, collabCode);
+
+        // Write current state to Firebase
+        var data = buildSyncPayload();
+        data.meta = { createdAt: Date.now() };
+
+        fetch(firebaseUrl + '/trips/' + collabCode + '.json', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(function () {
+            startListening();
+            updateCollabUI();
+            hideCollabModal();
+            showToast('Trip shared! Code: ' + collabCode);
+        })
+        .catch(function (err) {
+            collabCode = null;
+            localStorage.removeItem(COLLAB_TRIP_KEY);
+            showToast('Error: ' + err.message);
+        });
+    }
+
+    function joinSharedTrip() {
+        if (!firebaseUrl) return;
+
+        var code = document.getElementById('collab-join-input').value.trim().toUpperCase();
+        if (code.length !== 6) {
+            showToast('Enter a 6-character code');
+            return;
+        }
+
+        // Check if trip exists
+        fetch(firebaseUrl + '/trips/' + code + '/meta.json')
+        .then(function (r) { return r.json(); })
+        .then(function (meta) {
+            if (!meta) {
+                showToast('Trip not found');
+                return;
+            }
+
+            // Download remote data
+            return fetch(firebaseUrl + '/trips/' + code + '.json')
+            .then(function (r) { return r.json(); })
+            .then(function (tripData) {
+                collabCode = code;
+                localStorage.setItem(COLLAB_TRIP_KEY, collabCode);
+
+                if (tripData) {
+                    applyRemoteData(tripData);
+                }
+
+                startListening();
+                updateCollabUI();
+                hideCollabModal();
+                showToast('Joined trip: ' + code);
+            });
+        })
+        .catch(function (err) {
+            showToast('Connection error: ' + err.message);
+        });
+    }
+
+    function disconnectTrip() {
+        stopListening();
+        collabCode = null;
+        localStorage.removeItem(COLLAB_TRIP_KEY);
+        updateCollabUI();
+        hideCollabModal();
+        showToast('Disconnected');
+    }
+
+    function buildSyncPayload() {
+        // Convert locations array to object keyed by ID for Firebase
+        var locsObj = {};
+        locations.forEach(function (loc) {
+            locsObj[loc.id] = loc;
+        });
+
+        return {
+            locations: locsObj,
+            tripDates: tripDates || null,
+            dayOrders: dayOrders || {}
+        };
+    }
+
+    function syncToFirebase() {
+        if (!firebaseUrl || !collabCode) return;
+
+        var data = buildSyncPayload();
+
+        fetch(firebaseUrl + '/trips/' + collabCode + '.json', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        }).catch(function (err) {
+            console.warn('Firebase sync error:', err);
+        });
+    }
+
+    function startListening() {
+        stopListening();
+        if (!firebaseUrl || !collabCode) return;
+
+        var url = firebaseUrl + '/trips/' + collabCode + '.json';
+        collabStream = new EventSource(url);
+
+        collabStream.addEventListener('put', function (e) {
+            try {
+                var msg = JSON.parse(e.data);
+                if (msg.path === '/' && msg.data) {
+                    applyRemoteData(msg.data);
+                } else if (msg.path && msg.path !== '/') {
+                    // Partial update — refetch the whole trip for simplicity
+                    fetchAndApply();
+                }
+            } catch (err) {
+                console.warn('Firebase parse error:', err);
+            }
+        });
+
+        collabStream.addEventListener('patch', function () {
+            fetchAndApply();
+        });
+
+        collabStream.onerror = function () {
+            // EventSource auto-reconnects; just log it
+            console.warn('Firebase stream disconnected — reconnecting...');
+        };
+    }
+
+    function stopListening() {
+        if (collabStream) {
+            collabStream.close();
+            collabStream = null;
+        }
+    }
+
+    function fetchAndApply() {
+        if (!firebaseUrl || !collabCode) return;
+        fetch(firebaseUrl + '/trips/' + collabCode + '.json')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data) applyRemoteData(data);
+        })
+        .catch(function () { /* ignore fetch errors during reconnect */ });
+    }
+
+    function applyRemoteData(data) {
+        isSyncing = true;
+
+        // Convert locations object back to array
+        if (data.locations && !Array.isArray(data.locations)) {
+            var locsArr = [];
+            Object.keys(data.locations).forEach(function (id) {
+                var loc = data.locations[id];
+                if (loc && loc.name) {
+                    loc.id = id;
+                    locsArr.push(loc);
+                }
+            });
+            locations = locsArr;
+        } else if (Array.isArray(data.locations)) {
+            locations = data.locations;
+        }
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(locations)); } catch (e) { /* ignore */ }
+
+        if (data.tripDates !== undefined) {
+            tripDates = data.tripDates;
+            try { localStorage.setItem(TRIP_DATES_KEY, JSON.stringify(tripDates)); } catch (e) { /* ignore */ }
+        }
+
+        if (data.dayOrders !== undefined) {
+            dayOrders = {};
+            if (data.dayOrders) {
+                Object.keys(data.dayOrders).forEach(function (day) {
+                    var val = data.dayOrders[day];
+                    if (Array.isArray(val)) {
+                        dayOrders[day] = val;
+                    } else if (val && typeof val === 'object') {
+                        // Firebase may convert arrays to objects with integer keys
+                        dayOrders[day] = Object.keys(val).sort(function (a, b) { return a - b; }).map(function (k) { return val[k]; });
+                    }
+                });
+            }
+            try { localStorage.setItem(DAY_ORDER_KEY, JSON.stringify(dayOrders)); } catch (e) { /* ignore */ }
+        }
+
+        // Re-render everything
+        buildDayTabs();
+        renderAllMarkers();
+        if (routeVisible) drawRoute();
+
+        isSyncing = false;
+    }
+
+    function updateCollabUI() {
+        var btn = document.getElementById('btn-collab');
+        var badge = document.getElementById('collab-badge');
+        if (!btn) return;
+
+        btn.classList.toggle('active', !!collabCode);
+        if (badge) badge.style.display = collabCode ? 'block' : 'none';
+
+        // Update modal sections
+        var createSection = document.getElementById('collab-create-section');
+        var connectedSection = document.getElementById('collab-connected-section');
+        var codeDisplay = document.getElementById('collab-code-display');
+        if (!createSection) return;
+
+        if (collabCode) {
+            createSection.classList.add('hidden');
+            connectedSection.classList.remove('hidden');
+            codeDisplay.textContent = collabCode;
+        } else {
+            createSection.classList.remove('hidden');
+            connectedSection.classList.add('hidden');
+        }
+    }
+
+    function copyCollabCode() {
+        if (!collabCode) return;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(collabCode).then(function () {
+                showToast('Code copied!');
+            });
+        } else {
+            // Fallback
+            var input = document.createElement('input');
+            input.value = collabCode;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+            showToast('Code copied!');
+        }
     }
 
     // =========================================================================
@@ -2065,6 +2385,20 @@
         document.getElementById('btn-trip-save').addEventListener('click', saveTripSettings);
         document.getElementById('btn-trip-cancel').addEventListener('click', hideTripSettingsModal);
         document.getElementById('btn-trip-clear').addEventListener('click', clearTripSettings);
+
+        // Collaboration
+        document.getElementById('btn-collab').addEventListener('click', showCollabModal);
+        document.getElementById('btn-collab-close').addEventListener('click', hideCollabModal);
+        document.getElementById('btn-collab-create').addEventListener('click', createSharedTrip);
+        document.getElementById('btn-collab-join').addEventListener('click', joinSharedTrip);
+        document.getElementById('btn-collab-disconnect').addEventListener('click', disconnectTrip);
+        document.getElementById('btn-collab-copy').addEventListener('click', copyCollabCode);
+        document.getElementById('btn-collab-setup').addEventListener('click', function () {
+            hideCollabModal();
+            showFirebaseSetupModal();
+        });
+        document.getElementById('btn-firebase-save').addEventListener('click', saveFirebaseConfig);
+        document.getElementById('btn-firebase-cancel').addEventListener('click', hideFirebaseSetupModal);
 
         // Handle sheet drag to dismiss (simple swipe-down)
         document.querySelectorAll('.sheet-handle').forEach(function (handle) {

@@ -2352,8 +2352,28 @@
         document.getElementById('btn-my-location').addEventListener('click', goToMyLocation);
         document.getElementById('btn-fit-all').addEventListener('click', fitAllMarkers);
         document.getElementById('btn-route').addEventListener('click', toggleRoute);
-        document.getElementById('btn-download').addEventListener('click', startTileDownload);
         document.getElementById('btn-list').addEventListener('click', showListSheet);
+
+        // Overflow menu
+        document.getElementById('btn-overflow').addEventListener('click', function (e) {
+            e.stopPropagation();
+            var menu = document.getElementById('overflow-menu');
+            menu.classList.toggle('hidden');
+        });
+        document.getElementById('btn-download').addEventListener('click', function () {
+            document.getElementById('overflow-menu').classList.add('hidden');
+            startTileDownload();
+        });
+        document.getElementById('btn-collab').addEventListener('click', function () {
+            document.getElementById('overflow-menu').classList.add('hidden');
+            showCollabModal();
+        });
+        document.addEventListener('click', function (e) {
+            var wrap = document.querySelector('.header-overflow-wrap');
+            if (wrap && !wrap.contains(e.target)) {
+                document.getElementById('overflow-menu').classList.add('hidden');
+            }
+        });
 
         // Overlay click - close sheets
         document.getElementById('overlay').addEventListener('click', hideAllSheets);
@@ -2441,7 +2461,6 @@
         document.getElementById('btn-trip-clear').addEventListener('click', clearTripSettings);
 
         // Collaboration
-        document.getElementById('btn-collab').addEventListener('click', showCollabModal);
         document.getElementById('btn-collab-close').addEventListener('click', hideCollabModal);
         document.getElementById('btn-collab-create').addEventListener('click', createSharedTrip);
         document.getElementById('btn-collab-join').addEventListener('click', joinSharedTrip);

@@ -65,6 +65,56 @@ html, body {
     color: #FF9800;
 }
 
+/* === Overflow Menu === */
+.header-overflow-wrap {
+    position: relative;
+}
+
+#btn-overflow {
+    position: relative;
+}
+
+.overflow-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 200px;
+    background: #3E2723;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    overflow: hidden;
+    z-index: 1001;
+}
+
+.overflow-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    background: none;
+    color: rgba(255,255,255,0.9);
+    font-size: 0.88rem;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s;
+}
+
+.overflow-item:active {
+    background: rgba(255,255,255,0.15);
+}
+
+.overflow-item + .overflow-item {
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.overflow-item svg {
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
 /* === Day Tabs === */
 .day-tabs {
     position: fixed;

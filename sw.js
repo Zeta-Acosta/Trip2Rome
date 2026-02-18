@@ -1,49 +1,28 @@
-var CACHE_NAME = 'trip2rome-v6';
 var TILE_CACHE = 'trip2rome-tiles';
+var CDN_CACHE = 'trip2rome-cdn';
 
-var APP_SHELL = [
-    './',
-    './index.html',
-    './css/style.css',
-    './js/app.js',
-    './manifest.json',
-    './icons/icon.svg'
-];
-
-// Install: cache app shell
+// Install: activate immediately, no app shell caching
 self.addEventListener('install', function (event) {
-    event.waitUntil(
-        caches.open(CACHE_NAME).then(function (cache) {
-            return cache.addAll(APP_SHELL);
-        })
-    );
     self.skipWaiting();
 });
 
-// Activate: clean old caches and force-reload all clients
+// Activate: clean up any old app shell caches from previous versions
 self.addEventListener('activate', function (event) {
     event.waitUntil(
         caches.keys().then(function (keys) {
             return Promise.all(
                 keys.filter(function (k) {
-                    return k !== CACHE_NAME && k !== TILE_CACHE;
+                    return k !== TILE_CACHE && k !== CDN_CACHE;
                 }).map(function (k) {
                     return caches.delete(k);
                 })
             );
-        }).then(function () {
-            // After cleaning caches, reload all open tabs so they get fresh assets
-            return self.clients.matchAll({ type: 'window' }).then(function (clients) {
-                clients.forEach(function (client) {
-                    client.navigate(client.url);
-                });
-            });
         })
     );
     self.clients.claim();
 });
 
-// Fetch: cache-first for tiles & CDN, network-first for app
+// Fetch: only intercept tiles and CDN — let app files go straight to network
 self.addEventListener('fetch', function (event) {
     var url = new URL(event.request.url);
 
@@ -59,7 +38,6 @@ self.addEventListener('fetch', function (event) {
                         }
                         return response;
                     }).catch(function () {
-                        // Return a transparent 1x1 PNG if offline and tile not cached
                         return new Response(
                             atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='),
                             { headers: { 'Content-Type': 'image/png' } }
@@ -74,7 +52,7 @@ self.addEventListener('fetch', function (event) {
     // CDN resources (Leaflet): cache-first
     if (url.hostname === 'unpkg.com') {
         event.respondWith(
-            caches.open(CACHE_NAME).then(function (cache) {
+            caches.open(CDN_CACHE).then(function (cache) {
                 return cache.match(event.request).then(function (cached) {
                     if (cached) return cached;
                     return fetch(event.request).then(function (response) {
@@ -89,23 +67,7 @@ self.addEventListener('fetch', function (event) {
         return;
     }
 
-    // App files: network-first, fallback to cache
-    if (url.origin === self.location.origin) {
-        event.respondWith(
-            fetch(event.request).then(function (response) {
-                if (response.ok) {
-                    var responseClone = response.clone();
-                    caches.open(CACHE_NAME).then(function (cache) {
-                        cache.put(event.request, responseClone);
-                    });
-                }
-                return response;
-            }).catch(function () {
-                return caches.match(event.request);
-            })
-        );
-        return;
-    }
+    // Everything else (app files): pass through to network, no caching
 });
 
 // Message handler: tile pre-download
@@ -132,7 +94,6 @@ function downloadTiles(bounds, minZoom, maxZoom) {
     var downloaded = 0;
     var total = tiles.length;
 
-    // Download sequentially with rate limiting (respect OSM tile policy: max 2/sec)
     function downloadNext(index) {
         if (index >= tiles.length) {
             notifyClients({ type: 'DOWNLOAD_COMPLETE', total: total });
@@ -142,7 +103,6 @@ function downloadTiles(bounds, minZoom, maxZoom) {
         caches.open(TILE_CACHE).then(function (cache) {
             cache.match(tiles[index]).then(function (cached) {
                 if (cached) {
-                    // Already cached, skip
                     downloaded++;
                     notifyClients({ type: 'DOWNLOAD_PROGRESS', downloaded: downloaded, total: total });
                     downloadNext(index + 1);
@@ -153,7 +113,6 @@ function downloadTiles(bounds, minZoom, maxZoom) {
                         }
                         downloaded++;
                         notifyClients({ type: 'DOWNLOAD_PROGRESS', downloaded: downloaded, total: total });
-                        // Rate limit: 500ms between requests
                         setTimeout(function () { downloadNext(index + 1); }, 500);
                     }).catch(function () {
                         downloaded++;

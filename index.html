@@ -38,6 +38,10 @@
             <button id="btn-download" class="header-btn" title="Download Offline Map">
                 <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
             </button>
+            <button id="btn-collab" class="header-btn" title="Collaborate">
+                <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                <span id="collab-badge" class="collab-badge"></span>
+            </button>
             <button id="btn-list" class="header-btn" title="Location List">
                 <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
             </button>
@@ -263,6 +267,72 @@
                 <button type="button" id="btn-trip-cancel" class="action-btn">Cancel</button>
                 <button type="button" id="btn-trip-clear" class="action-btn danger">Clear</button>
                 <button type="button" id="btn-trip-save" class="action-btn primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collaboration Modal -->
+    <div id="collab-modal" class="modal hidden">
+        <div class="modal-content collab-modal-content">
+            <h3>Collaborate</h3>
+
+            <!-- Not connected state -->
+            <div id="collab-create-section">
+                <p class="collab-hint">Share your trip so both of you see the same pins, plans, and routes in real time.</p>
+
+                <button type="button" id="btn-collab-create" class="action-btn primary collab-action-btn">
+                    <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    Create Shared Trip
+                </button>
+
+                <div class="collab-divider"><span>or join existing</span></div>
+
+                <div class="collab-join-row">
+                    <input type="text" id="collab-join-input" placeholder="ABC123" maxlength="6" class="collab-code-input">
+                    <button type="button" id="btn-collab-join" class="action-btn primary collab-join-btn">Join</button>
+                </div>
+            </div>
+
+            <!-- Connected state -->
+            <div id="collab-connected-section" class="hidden">
+                <p class="collab-hint">You're syncing in real time. Share this code with your travel partner:</p>
+                <div class="collab-code-box">
+                    <span id="collab-code-display" class="collab-code-text"></span>
+                    <button type="button" id="btn-collab-copy" class="collab-copy-btn" title="Copy code">
+                        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+                <button type="button" id="btn-collab-disconnect" class="action-btn danger collab-action-btn">Disconnect</button>
+            </div>
+
+            <div class="collab-footer">
+                <button type="button" id="btn-collab-setup" class="collab-setup-link">Firebase Settings</button>
+                <button type="button" id="btn-collab-close" class="action-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Setup Modal -->
+    <div id="firebase-setup-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Firebase Setup</h3>
+            <div class="firebase-steps">
+                <p>One-time setup (free):</p>
+                <ol>
+                    <li>Go to <strong>console.firebase.google.com</strong></li>
+                    <li>Create a project (any name)</li>
+                    <li>Build &rarr; Realtime Database &rarr; Create</li>
+                    <li>Rules tab &rarr; set <code>".read": true, ".write": true</code></li>
+                    <li>Copy the database URL below</li>
+                </ol>
+            </div>
+            <div class="form-group">
+                <label for="firebase-url-input">Database URL</label>
+                <input type="url" id="firebase-url-input" placeholder="https://your-project-default-rtdb.firebaseio.com">
+            </div>
+            <div class="sheet-actions">
+                <button type="button" id="btn-firebase-cancel" class="action-btn">Cancel</button>
+                <button type="button" id="btn-firebase-save" class="action-btn primary">Save</button>
             </div>
         </div>
     </div>

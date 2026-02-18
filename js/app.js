@@ -34,7 +34,8 @@
             address: 'Via Filippo Turati, 129, 00185 Roma RM',
             notes: 'Home base!',
             date: '',
-            time: ''
+            time: '',
+            visited: false
         },
         {
             id: 'loc_trevi',
@@ -45,7 +46,8 @@
             address: 'Piazza di Trevi, 00187 Roma RM',
             notes: 'Throw a coin! Best visited early morning or late evening.',
             date: '',
-            time: ''
+            time: '',
+            visited: false
         },
         {
             id: 'loc_colosseum',
@@ -56,7 +58,8 @@
             address: 'Piazza del Colosseo, 1, 00184 Roma RM',
             notes: 'Book tickets online in advance to skip the line!',
             date: '',
-            time: ''
+            time: '',
+            visited: false
         },
         {
             id: 'loc_galbi',
@@ -67,7 +70,8 @@
             address: 'Via Cremera, 21, Roma',
             notes: '',
             date: '',
-            time: ''
+            time: '',
+            visited: false
         },
         {
             id: 'loc_vigamus',
@@ -78,7 +82,8 @@
             address: 'Via Sabotino, 4A, 00195 Roma RM',
             notes: 'Video game museum - check opening hours!',
             date: '',
-            time: ''
+            time: '',
+            visited: false
         }
     ];
 
@@ -260,17 +265,26 @@
         if (routeVisible) drawRoute();
     }
 
+    function toggleVisited(id) {
+        var loc = getLocation(id);
+        if (!loc) return;
+        updateLocation(id, { visited: !loc.visited });
+        renderList();
+    }
+
     // =========================================================================
     // Markers
     // =========================================================================
-    function createMarkerIcon(category) {
+    function createMarkerIcon(category, visited) {
         var cat = CATEGORIES[category] || CATEGORIES.custom;
+        var badge = visited ? '<span class="marker-visited-badge">\u2713</span>' : '';
         var html =
-            '<div class="marker-pin">' +
+            '<div class="marker-pin' + (visited ? ' marker-visited' : '') + '">' +
             '  <div class="marker-pin-head" style="background:' + cat.color + '">' +
             '    <span class="marker-icon">' + cat.icon + '</span>' +
             '  </div>' +
             '  <div class="marker-pin-tail" style="border-top-color:' + cat.color + '"></div>' +
+            badge +
             '</div>';
 
         return L.divIcon({
@@ -286,7 +300,7 @@
         if (!activeFilters[loc.category]) return;
         if (markers[loc.id]) return;
 
-        var m = L.marker([loc.lat, loc.lng], { icon: createMarkerIcon(loc.category) });
+        var m = L.marker([loc.lat, loc.lng], { icon: createMarkerIcon(loc.category, loc.visited) });
         m.locationId = loc.id;
         m.addTo(map);
         m.on('click', function () { showDetail(loc.id); });
@@ -343,6 +357,9 @@
         // Set time input
         document.getElementById('detail-time-input').value = loc.time || '';
 
+        // Update visited button
+        updateVisitedButton(loc);
+
         // Store which location is shown
         document.getElementById('detail-sheet').dataset.locationId = id;
 
@@ -350,6 +367,21 @@
 
         // Center map on location
         map.panTo([loc.lat, loc.lng]);
+    }
+
+    function updateVisitedButton(loc) {
+        var btn = document.getElementById('btn-visited');
+        var icon = document.getElementById('btn-visited-icon');
+        var label = document.getElementById('btn-visited-label');
+        if (loc.visited) {
+            btn.classList.add('checked');
+            icon.textContent = '\u2611';
+            label.textContent = 'Visited';
+        } else {
+            btn.classList.remove('checked');
+            icon.textContent = '\u2610';
+            label.textContent = 'Mark visited';
+        }
     }
 
     function buildDetailDayChips(loc) {
@@ -462,6 +494,7 @@
             showToast('Location updated');
         } else {
             data.id = 'loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            data.visited = false;
             addLocation(data);
             showToast('Location added!');
         }
@@ -556,7 +589,6 @@
             }
 
             var item = document.createElement('div');
-            item.className = 'loc-item' + (isDayView ? ' draggable' : '');
             item.dataset.locationId = loc.id;
             item.dataset.index = index;
 
@@ -564,8 +596,14 @@
                 ? '<span class="drag-handle"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></span>'
                 : '';
 
+            var visitedClass = loc.visited ? ' visited' : '';
+            item.className = 'loc-item' + (isDayView ? ' draggable' : '') + visitedClass;
+
             item.innerHTML =
                 dragHandle +
+                '<button class="loc-check" data-id="' + loc.id + '" title="Toggle visited">' +
+                (loc.visited ? '\u2611' : '\u2610') +
+                '</button>' +
                 '<span class="loc-dot" style="background:' + cat.color + '"></span>' +
                 '<div class="loc-info">' +
                 '  <div class="loc-name">' + escapeHtml(loc.name) + '</div>' +
@@ -573,9 +611,14 @@
                 '</div>' +
                 '<span class="loc-arrow">&rsaquo;</span>';
 
+            item.querySelector('.loc-check').addEventListener('click', function (e) {
+                e.stopPropagation();
+                toggleVisited(loc.id);
+            });
+
             item.addEventListener('click', function (e) {
-                // Don't navigate if drag handle was clicked
-                if (e.target.closest('.drag-handle')) return;
+                // Don't navigate if drag handle or checkbox was clicked
+                if (e.target.closest('.drag-handle') || e.target.closest('.loc-check')) return;
                 hideAllSheets();
                 map.setView([loc.lat, loc.lng], 16);
                 setTimeout(function () { showDetail(loc.id); }, 350);
@@ -2222,7 +2265,8 @@
             address: loc.address || '',
             date: loc.date || '',
             time: loc.time || '',
-            notes: loc.notes || ''
+            notes: loc.notes || '',
+            visited: false
         };
 
         addLocation(data);
@@ -2257,7 +2301,8 @@
                 address: loc.address || '',
                 date: loc.date || '',
                 time: loc.time || '',
-                notes: loc.notes || ''
+                notes: loc.notes || '',
+                visited: false
             };
 
             addLocation(data);
@@ -2315,6 +2360,15 @@
 
         // Detail sheet: day/time picker
         setupDetailTimeInput();
+
+        // Detail sheet: visited toggle
+        document.getElementById('btn-visited').addEventListener('click', function () {
+            var id = document.getElementById('detail-sheet').dataset.locationId;
+            if (!id) return;
+            toggleVisited(id);
+            var loc = getLocation(id);
+            if (loc) updateVisitedButton(loc);
+        });
 
         // Detail sheet actions
         document.getElementById('btn-navigate').addEventListener('click', function () {

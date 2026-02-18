@@ -186,6 +186,28 @@ html, body {
     line-height: 1;
 }
 
+/* === Visited Badge on Map Markers === */
+.marker-visited {
+    opacity: 0.7;
+}
+
+.marker-visited-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 16px;
+    height: 16px;
+    background: #4CAF50;
+    color: #fff;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    border: 1.5px solid #fff;
+    z-index: 3;
+}
+
 .marker-bounce {
     animation: markerBounce 0.4s ease-out;
 }
@@ -367,6 +389,22 @@ html, body {
 
 .detail-notes:empty {
     display: none;
+}
+
+/* === Visited Toggle Button in Detail === */
+.visited-btn {
+    gap: 8px;
+    font-size: 0.92rem;
+}
+
+.visited-btn #btn-visited-icon {
+    font-size: 1.15rem;
+}
+
+.visited-btn.checked {
+    background: #e8f5e9;
+    color: #2E7D32;
+    border-color: #c8e6c9;
 }
 
 /* === Detail Schedule (day + time picker) === */
@@ -646,6 +684,36 @@ html, body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* === Visited Checkbox in List === */
+.loc-check {
+    background: none;
+    border: none;
+    padding: 4px;
+    font-size: 1.25rem;
+    line-height: 1;
+    color: #bbb;
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.loc-item.visited .loc-check {
+    color: #4CAF50;
+}
+
+.loc-item.visited .loc-name {
+    text-decoration: line-through;
+    color: #aaa;
+}
+
+.loc-item.visited .loc-detail {
+    color: #bbb;
+}
+
+.loc-item.visited .loc-dot {
+    opacity: 0.4;
 }
 
 .loc-arrow {

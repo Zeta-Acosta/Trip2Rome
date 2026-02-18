@@ -327,14 +327,11 @@
         document.getElementById('detail-address').textContent = loc.address || '';
         document.getElementById('detail-notes').textContent = loc.notes || '';
 
-        var dt = '';
-        if (loc.date) {
-            dt = formatDate(loc.date);
-            if (loc.time) dt += ' at ' + loc.time;
-        } else if (loc.time) {
-            dt = 'Time: ' + loc.time;
-        }
-        document.getElementById('detail-datetime').textContent = dt;
+        // Build day chips
+        buildDetailDayChips(loc);
+
+        // Set time input
+        document.getElementById('detail-time-input').value = loc.time || '';
 
         // Store which location is shown
         document.getElementById('detail-sheet').dataset.locationId = id;
@@ -343,6 +340,55 @@
 
         // Center map on location
         map.panTo([loc.lat, loc.lng]);
+    }
+
+    function buildDetailDayChips(loc) {
+        var container = document.getElementById('detail-day-chips');
+        container.innerHTML = '';
+        var days = getTripDays();
+
+        // "None" chip to unassign
+        var noneChip = document.createElement('button');
+        noneChip.type = 'button';
+        noneChip.className = 'detail-day-chip' + (!loc.date ? ' selected' : '');
+        noneChip.textContent = '—';
+        noneChip.title = 'No day';
+        noneChip.addEventListener('click', function () {
+            applyDetailDay(loc.id, '');
+        });
+        container.appendChild(noneChip);
+
+        days.forEach(function (dateStr) {
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'detail-day-chip' + (loc.date === dateStr ? ' selected' : '');
+            var d = new Date(dateStr + 'T00:00:00');
+            var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            chip.textContent = dayNames[d.getDay()] + ' ' + d.getDate();
+            chip.addEventListener('click', function () {
+                applyDetailDay(loc.id, dateStr);
+            });
+            container.appendChild(chip);
+        });
+    }
+
+    function applyDetailDay(id, dateStr) {
+        updateLocation(id, { date: dateStr });
+        // Refresh chips to show new selection
+        var loc = getLocation(id);
+        if (loc) buildDetailDayChips(loc);
+        // Refresh list if open
+        if (selectedDay !== 'all' && dateStr !== selectedDay) {
+            renderAllMarkers();
+        }
+    }
+
+    function setupDetailTimeInput() {
+        document.getElementById('detail-time-input').addEventListener('change', function () {
+            var id = document.getElementById('detail-sheet').dataset.locationId;
+            if (!id) return;
+            updateLocation(id, { time: this.value });
+        });
     }
 
     // =========================================================================
@@ -1201,7 +1247,15 @@
     function registerSW() {
         if (!('serviceWorker' in navigator)) return;
 
-        navigator.serviceWorker.register('sw.js').then(function () {
+        // Auto-reload when a new service worker takes control
+        var refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+        });
+
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
             // Listen for download progress messages
             navigator.serviceWorker.addEventListener('message', function (e) {
                 if (e.data.type === 'DOWNLOAD_PROGRESS') {
@@ -1210,6 +1264,9 @@
                     onDownloadComplete(e.data.total);
                 }
             });
+
+            // When a new SW is found and installs, it will skipWaiting+claim,
+            // which triggers controllerchange above → auto-reload
         }).catch(function (err) {
             console.warn('SW registration failed:', err);
         });
@@ -1378,7 +1435,7 @@
         var gearBtn = document.createElement('button');
         gearBtn.className = 'day-tab-settings';
         gearBtn.title = 'Trip Dates';
-        gearBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
+        gearBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
         gearBtn.addEventListener('click', showTripSettingsModal);
         container.appendChild(gearBtn);
     }
@@ -1935,6 +1992,9 @@
 
         // Overlay click - close sheets
         document.getElementById('overlay').addEventListener('click', hideAllSheets);
+
+        // Detail sheet: day/time picker
+        setupDetailTimeInput();
 
         // Detail sheet actions
         document.getElementById('btn-navigate').addEventListener('click', function () {

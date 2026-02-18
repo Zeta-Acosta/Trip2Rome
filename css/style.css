@@ -71,9 +71,10 @@ html, body {
     top: 52px;
     left: 0;
     right: 0;
-    z-index: 999;
+    z-index: 1000;
     height: 40px;
     background: #3E2723;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     display: flex;
     align-items: center;
     gap: 0;
@@ -114,11 +115,11 @@ html, body {
 .day-tab-settings {
     flex-shrink: 0;
     margin-left: auto;
-    padding: 6px;
+    padding: 6px 8px;
     border: none;
     border-radius: 50%;
-    background: transparent;
-    color: rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.7);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -366,6 +367,60 @@ html, body {
 
 .detail-notes:empty {
     display: none;
+}
+
+/* === Detail Schedule (day + time picker) === */
+.detail-schedule {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.detail-day-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.detail-day-chip {
+    padding: 5px 10px;
+    border: 1.5px solid #ddd;
+    border-radius: 16px;
+    background: #fff;
+    color: #555;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+
+.detail-day-chip:active {
+    transform: scale(0.95);
+}
+
+.detail-day-chip.selected {
+    background: #5D4037;
+    color: #fff;
+    border-color: #5D4037;
+}
+
+.detail-time-input {
+    padding: 5px 8px;
+    border: 1.5px solid #ddd;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    color: #333;
+    background: #fff;
+    width: 90px;
+    flex-shrink: 0;
+}
+
+.detail-time-input::-webkit-calendar-picker-indicator {
+    opacity: 0.5;
 }
 
 /* === Sheet Actions === */

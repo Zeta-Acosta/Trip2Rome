@@ -200,7 +200,7 @@
     }
 
     function saveLocations() {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(locations)); } catch (e) { /* ignore */ }
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(locations)); } catch (e) { handleStorageError(e); }
         if (!isSyncing) syncToFirebase();
     }
 
@@ -261,6 +261,7 @@
 
         locations = locations.filter(function (l) { return l.id !== id; });
         saveLocations();
+        syncDeleteToFirebase(id);
         removeMarker(id);
         if (routeVisible) drawRoute();
     }
@@ -660,7 +661,15 @@
     // =========================================================================
     // Drag-to-Reorder (touch and mouse)
     // =========================================================================
+    var dragReorderCleanup = null;
+
     function setupDragReorder(listEl) {
+        // Remove previous listeners to prevent accumulation
+        if (dragReorderCleanup) {
+            dragReorderCleanup();
+            dragReorderCleanup = null;
+        }
+
         var dragItem = null;
         var dragStartY = 0;
         var items;
@@ -757,6 +766,14 @@
         listEl.addEventListener('mousemove', onDragMove);
         listEl.addEventListener('touchend', onDragEnd);
         listEl.addEventListener('mouseup', onDragEnd);
+
+        // Store cleanup function to remove list-level listeners on next call
+        dragReorderCleanup = function () {
+            listEl.removeEventListener('touchmove', onDragMove);
+            listEl.removeEventListener('mousemove', onDragMove);
+            listEl.removeEventListener('touchend', onDragEnd);
+            listEl.removeEventListener('mouseup', onDragEnd);
+        };
     }
 
     // =========================================================================
@@ -1403,6 +1420,12 @@
         return div.innerHTML;
     }
 
+    function handleStorageError(e) {
+        if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
+            showToast('Storage full - export your data to avoid losing changes');
+        }
+    }
+
     // =========================================================================
     // Trip Dates & Day Planning
     // =========================================================================
@@ -1422,7 +1445,7 @@
     }
 
     function saveTripDates() {
-        try { localStorage.setItem(TRIP_DATES_KEY, JSON.stringify(tripDates)); } catch (e) { /* ignore */ }
+        try { localStorage.setItem(TRIP_DATES_KEY, JSON.stringify(tripDates)); } catch (e) { handleStorageError(e); }
         if (!isSyncing) syncToFirebase();
     }
 
@@ -1434,7 +1457,7 @@
     }
 
     function saveDayOrders() {
-        try { localStorage.setItem(DAY_ORDER_KEY, JSON.stringify(dayOrders)); } catch (e) { /* ignore */ }
+        try { localStorage.setItem(DAY_ORDER_KEY, JSON.stringify(dayOrders)); } catch (e) { handleStorageError(e); }
         if (!isSyncing) syncToFirebase();
     }
 
@@ -1759,14 +1782,44 @@
     function syncToFirebase() {
         if (!firebaseUrl || !collabCode) return;
 
-        var data = buildSyncPayload();
+        var base = firebaseUrl + '/trips/' + collabCode;
+        var headers = { 'Content-Type': 'application/json' };
 
-        fetch(firebaseUrl + '/trips/' + collabCode + '.json', {
+        // Sync each location individually to avoid overwriting concurrent edits
+        var locsObj = {};
+        locations.forEach(function (loc) {
+            locsObj[loc.id] = loc;
+        });
+
+        fetch(base + '/locations.json', {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            headers: headers,
+            body: JSON.stringify(locsObj)
         }).catch(function (err) {
-            console.warn('Firebase sync error:', err);
+            console.warn('Firebase sync error (locations):', err);
+        });
+
+        // Sync metadata separately
+        var meta = {
+            tripDates: tripDates || null,
+            dayOrders: dayOrders || {}
+        };
+        fetch(base + '.json', {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify(meta)
+        }).catch(function (err) {
+            console.warn('Firebase sync error (meta):', err);
+        });
+    }
+
+    function syncDeleteToFirebase(locationId) {
+        if (!firebaseUrl || !collabCode) return;
+
+        fetch(firebaseUrl + '/trips/' + collabCode + '/locations/' + locationId + '.json', {
+            method: 'DELETE'
+        }).catch(function (err) {
+            console.warn('Firebase delete error:', err);
         });
     }
 
@@ -1835,11 +1888,11 @@
         } else if (Array.isArray(data.locations)) {
             locations = data.locations;
         }
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(locations)); } catch (e) { /* ignore */ }
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(locations)); } catch (e) { handleStorageError(e); }
 
         if (data.tripDates !== undefined) {
             tripDates = data.tripDates;
-            try { localStorage.setItem(TRIP_DATES_KEY, JSON.stringify(tripDates)); } catch (e) { /* ignore */ }
+            try { localStorage.setItem(TRIP_DATES_KEY, JSON.stringify(tripDates)); } catch (e) { handleStorageError(e); }
         }
 
         if (data.dayOrders !== undefined) {
@@ -1855,7 +1908,7 @@
                     }
                 });
             }
-            try { localStorage.setItem(DAY_ORDER_KEY, JSON.stringify(dayOrders)); } catch (e) { /* ignore */ }
+            try { localStorage.setItem(DAY_ORDER_KEY, JSON.stringify(dayOrders)); } catch (e) { handleStorageError(e); }
         }
 
         // Re-render everything
@@ -2329,6 +2382,58 @@
     }
 
     // =========================================================================
+    // Data Export / Import
+    // =========================================================================
+    function exportData() {
+        var data = {
+            locations: locations,
+            tripDates: tripDates,
+            dayOrders: dayOrders
+        };
+        var json = JSON.stringify(data, null, 2);
+        var blob = new Blob([json], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'trip2rome-backup.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Data exported');
+    }
+
+    function importData(file) {
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            try {
+                var data = JSON.parse(e.target.result);
+                if (!data.locations || !Array.isArray(data.locations)) {
+                    showToast('Invalid backup file');
+                    return;
+                }
+                locations = data.locations;
+                saveLocations();
+                if (data.tripDates && data.tripDates.start && data.tripDates.end) {
+                    tripDates = data.tripDates;
+                    saveTripDates();
+                }
+                if (data.dayOrders && typeof data.dayOrders === 'object') {
+                    dayOrders = data.dayOrders;
+                    saveDayOrders();
+                }
+                buildDayTabs();
+                renderAllMarkers();
+                if (routeVisible) drawRoute();
+                fitAllMarkers();
+                showToast(locations.length + ' locations imported');
+            } catch (err) {
+                showToast('Error reading file: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // =========================================================================
     // Event Listeners
     // =========================================================================
     function setupEvents() {
@@ -2367,6 +2472,15 @@
         document.getElementById('btn-collab').addEventListener('click', function () {
             document.getElementById('overflow-menu').classList.add('hidden');
             showCollabModal();
+        });
+        document.getElementById('btn-export').addEventListener('click', function () {
+            document.getElementById('overflow-menu').classList.add('hidden');
+            exportData();
+        });
+        document.getElementById('import-file-input').addEventListener('change', function (e) {
+            document.getElementById('overflow-menu').classList.add('hidden');
+            importData(e.target.files[0]);
+            e.target.value = '';
         });
         document.addEventListener('click', function (e) {
             var wrap = document.querySelector('.header-overflow-wrap');
